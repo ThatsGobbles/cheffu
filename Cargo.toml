@@ -5,3 +5,4 @@ authors = ["Mark LeMoine <thatsgobbles@gmail.com>"]
 
 [dependencies]
 error-chain = "0.11.0"
+maplit = "1.0.0"
