@@ -54,13 +54,23 @@ impl Gate {
     //     }
     // }
 
-    /// Produces a gate that allows slots that would pass at least one of the input gates.
+    /// Produces a gate that allows all slots that would pass at least one of the input gates.
     pub fn union(&self, other: &Self) -> Self {
         match (self, other) {
             (&Gate::Allow(ref ls), &Gate::Allow(ref rs)) => Gate::Allow(ls.union(rs).cloned().collect()),
             (&Gate::Allow(ref ls), &Gate::Block(ref rs)) => Gate::Block(rs.difference(ls).cloned().collect()),
             (&Gate::Block(ref ls), &Gate::Allow(ref rs)) => Gate::Block(ls.difference(rs).cloned().collect()),
             (&Gate::Block(ref ls), &Gate::Block(ref rs)) => Gate::Block(ls.intersection(rs).cloned().collect()),
+        }
+    }
+
+    /// Produces a gate that allows all slots that would pass all of the input gates.
+    pub fn intersection(&self, other: &Self) -> Self {
+        match (self, other) {
+            (&Gate::Allow(ref ls), &Gate::Allow(ref rs)) => Gate::Allow(ls.intersection(rs).cloned().collect()),
+            (&Gate::Allow(ref ls), &Gate::Block(ref rs)) => Gate::Allow(ls.difference(rs).cloned().collect()),
+            (&Gate::Block(ref ls), &Gate::Allow(ref rs)) => Gate::Allow(rs.difference(ls).cloned().collect()),
+            (&Gate::Block(ref ls), &Gate::Block(ref rs)) => Gate::Block(ls.union(rs).cloned().collect()),
         }
     }
 }
@@ -190,6 +200,38 @@ mod tests {
                 let u_is_allowed = produced.allows_slot(slot);
 
                 assert_eq!(l_is_allowed || r_is_allowed, u_is_allowed);
+            }
+        }
+    }
+
+    #[test]
+    fn test_intersection() {
+        let inputs_and_expected = vec![
+            ((Gate::Allow(hashset![0, 1, 2]), Gate::Allow(hashset![2, 3, 4])),
+                Gate::Allow(hashset![2])),
+            ((Gate::Allow(hashset![0, 1, 2]), Gate::Block(hashset![2, 3, 4])),
+                Gate::Allow(hashset![0, 1])),
+            ((Gate::Block(hashset![0, 1, 2]), Gate::Allow(hashset![2, 3, 4])),
+                Gate::Allow(hashset![3, 4])),
+            ((Gate::Block(hashset![0, 1, 2]), Gate::Block(hashset![2, 3, 4])),
+                Gate::Block(hashset![0, 1, 2, 3, 4])),
+            ((Gate::Allow(hashset![0, 1, 2]), Gate::Allow(hashset![3, 4, 5])),
+                Gate::Allow(hashset![])),
+            ((Gate::Allow(hashset![0, 1, 2]), Gate::Block(hashset![0, 1, 2])),
+                Gate::Allow(hashset![])),
+        ];
+
+        for ((l_gate, r_gate), expected) in inputs_and_expected {
+            let produced = l_gate.intersection(&r_gate);
+            assert_eq!(expected, produced);
+
+            // Manually perform the same logic that intersection should provide.
+            for slot in 0u8..10 {
+                let l_is_allowed = l_gate.allows_slot(slot);
+                let r_is_allowed = r_gate.allows_slot(slot);
+                let u_is_allowed = produced.allows_slot(slot);
+
+                assert_eq!(l_is_allowed && r_is_allowed, u_is_allowed);
             }
         }
     }
