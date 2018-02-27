@@ -1,7 +1,7 @@
-#[macro_use] extern crate error_chain;
 #[macro_use] extern crate maplit;
+#[macro_use] extern crate failure;
+#[macro_use] extern crate failure_derive;
 
-mod error;
 mod variant;
 mod token;
 

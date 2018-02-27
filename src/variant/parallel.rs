@@ -1,4 +1,5 @@
-use error::*;
+use failure::Error;
+
 use variant::gate::Gate;
 use token::Token;
 
@@ -36,16 +37,37 @@ pub struct GateHop {
     close: Option<Gate>,
 }
 
-// impl GateHop {
-//     pub fn apply(&self, stack: &mut Vec<Gate>) -> Result<()> {
-//         if let Some(gate) = self.start {
-//             stack.push(gate);
-//         }
+#[derive(Debug, Fail)]
+pub enum GateHopError {
+    #[fail(display = "stack is empty")]
+    EmptyStack,
+    #[fail(display = "top of stack does not match; expected: {}, produced: {}", expected, produced)]
+    StackMismatch{
+        expected: Gate,
+        produced: Gate,
+    },
+}
 
-//         if let Some(gate) = self.close {
-//             let result = stack.pop().ok_or()?;
-//         }
+impl GateHop {
+    pub fn apply(&self, stack: &mut Vec<Gate>) -> Result<(), Error> {
+        if let &Some(ref gate) = &self.start {
+            stack.push(gate.clone());
+        }
 
-//         Ok(())
-//     }
-// }
+        if let &Some(ref expected) = &self.close {
+            // let produced: Gate = stack.pop().ok_or(GateHopError::EmptyStack)?;
+
+            let opt_produced = stack.pop();
+
+            if let Some(produced) = opt_produced {
+                // We expect that the top of the stack should match our expected close gate.
+                ensure!(*expected == produced, GateHopError::StackMismatch{expected: expected.clone(), produced: produced.clone()});
+            }
+            else {
+                bail!(GateHopError::EmptyStack);
+            }
+        }
+
+        Ok(())
+    }
+}
