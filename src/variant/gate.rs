@@ -47,13 +47,6 @@ impl Gate {
         !self.allows_slot(slot)
     }
 
-    // pub fn slots(&self) -> &HashSet<Slot> {
-    //     match *self {
-    //         Gate::Allow(ref s) => s,
-    //         Gate::Block(ref s) => s,
-    //     }
-    // }
-
     /// Produces a gate that allows all slots that would pass at least one of the input gates.
     pub fn union(&self, other: &Self) -> Self {
         match (self, other) {
@@ -235,9 +228,4 @@ mod tests {
             }
         }
     }
-
-    // #[test]
-    // fn test_slots() {
-    //     // TODO: Complete!
-    // }
 }

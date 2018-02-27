@@ -3,5 +3,6 @@
 
 mod error;
 mod variant;
+mod token;
 
 fn main() {}
