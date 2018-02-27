@@ -55,17 +55,10 @@ impl GateHop {
         }
 
         if let &Some(ref expected) = &self.close {
-            // let produced: Gate = stack.pop().ok_or(GateHopError::EmptyStack)?;
+            let produced: Gate = stack.pop().ok_or(GateHopError::EmptyStack)?;
 
-            let opt_produced = stack.pop();
-
-            if let Some(produced) = opt_produced {
-                // We expect that the top of the stack should match our expected close gate.
-                ensure!(*expected == produced, GateHopError::StackMismatch{expected: expected.clone(), produced: produced.clone()});
-            }
-            else {
-                bail!(GateHopError::EmptyStack);
-            }
+            // We expect that the top of the stack should match our expected close gate.
+            ensure!(*expected == produced, GateHopError::StackMismatch{expected: expected.clone(), produced: produced.clone()});
         }
 
         Ok(())
