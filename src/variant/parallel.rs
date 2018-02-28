@@ -27,11 +27,11 @@ pub struct GraphHop {
     dst_nodule: Nodule,
 }
 
-pub type GraphHopSequence = Vec<GraphHop>;
+pub type GraphHopSeq = Vec<GraphHop>;
 
 pub struct GraphWalk {
     start_nodule: Nodule,
-    hop_seq: GraphHopSequence,
+    hop_seq: GraphHopSeq,
 }
 
 pub struct GateHop {
@@ -81,7 +81,7 @@ impl GateHop {
     }
 }
 
-pub type GateHopSequence = Vec<GateHop>;
+pub type GateHopSeq = Vec<GateHop>;
 
 /// Set of edge IDs outbound for a (implied) nodule.
 pub type OutEdgeIdSet = HashSet<EdgeId>;
@@ -92,22 +92,40 @@ pub type NoduleOutEdgeMap = HashMap<Nodule, OutEdgeIdSet>;
 /// Maps edge IDs to their edge definitions.
 pub type EdgeLookupMap = HashMap<EdgeId, Edge>;
 
-pub enum ProcedureItem {
+#[derive(Clone)]
+pub enum PathItem {
     Token(Token),
-    GatedAltChoices(GatedAltChoices),
+    AltChoiceSeq(AltChoiceSeq),
 }
 
-pub type ProcedureItemSequence = Vec<ProcedureItem>;
+pub type PathItemSeq = Vec<PathItem>;
 
-pub struct GatedAlt {
-    proc_items: ProcedureItemSequence,
+#[derive(Clone)]
+pub struct AltChoice {
+    proc_items: PathItemSeq,
     active_gate: Gate,
 }
 
-pub type GatedAltChoices = Vec<GatedAlt>;
+pub type AltChoiceSeq = Vec<AltChoice>;
 
-pub fn normalize_gated_alt_choices(gated_alt_choices: &GatedAltChoices) -> GatedAltChoices {
-    GatedAltChoices::new()
+/// Processes an alt sequence to remove multiple null alts, and to ensure that the union of all of its
+/// contained gates allows all slots (i.e. is an allow-all gate).
+pub fn normalize_alt_choice_seq(alt_choice_seq: &AltChoiceSeq) -> AltChoiceSeq {
+    // Calculate the value of the else-filter, which contains all slots not explicitly allowed in the alt choice.
+    let union_gate = alt_choice_seq.into_iter().fold(Gate::block_all(), |red, ref ac| red.union(&ac.active_gate));
+
+    let mut new_alt_choice_seq: AltChoiceSeq = alt_choice_seq.to_vec();
+
+    // If union gate is not allow-all, append an empty branch with the inverse of the union gate.
+    // This provides an "escape hatch" for a case when a slot does not match any provided gate.
+    if union_gate != Gate::allow_all() {
+        new_alt_choice_seq.push(AltChoice{ proc_items: PathItemSeq::new(), active_gate: union_gate.invert() });
+    }
+
+    // Drop any alt choices that have a block-all gate.
+    let mut new_alt_choice_seq: AltChoiceSeq = new_alt_choice_seq.into_iter().filter(|ref ac| ac.active_gate != Gate::block_all()).collect();
+
+    new_alt_choice_seq
 }
 
 /// Connects two nodules together with an edge.

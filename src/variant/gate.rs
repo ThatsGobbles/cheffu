@@ -16,10 +16,12 @@ impl Gate {
     pub fn allow_all() -> Self {
         Gate::Block(btreeset![])
     }
+
     pub fn block_all() -> Self {
         Gate::Allow(btreeset![])
     }
 
+    /// Checks if a gate has 'allow' semantics (is a white list).
     pub fn is_allow(&self) -> bool {
         match *self {
             Gate::Allow(_) => true,
@@ -27,10 +29,36 @@ impl Gate {
         }
     }
 
+    /// Checks if a gate has 'block' semantics (is a black list).
     pub fn is_block(&self) -> bool {
         !self.is_allow()
     }
 
+    /// Checks if a gate is 'allow-all', blocking no slots.
+    pub fn is_allow_all(&self) -> bool {
+        match *self {
+            Gate::Block(ref s) => s.is_empty(),
+            _ => false,
+        }
+    }
+
+    /// Checks if a gate is 'block-all', allowing no slots.
+    pub fn is_block_all(&self) -> bool {
+        match *self {
+            Gate::Allow(ref s) => s.is_empty(),
+            _ => false,
+        }
+    }
+
+    pub fn slots(&self) -> &SlotSet {
+        match self {
+            &Gate::Allow(ref s) => s,
+            &Gate::Block(ref s) => s,
+        }
+    }
+
+    /// Inverts a gate.
+    /// The resulting gate allows any slots blocked by the input gate, and vice versa.
     pub fn invert(&self) -> Self {
         match *self {
             Gate::Allow(ref s) => Gate::Block(s.clone()),
@@ -49,9 +77,10 @@ impl Gate {
         !self.allows_slot(slot)
     }
 
-    /// Produces a gate that allows all slots that would pass at least one of the input gates.
-    pub fn union(&self, other: &Self) -> Self {
-        match (self, other) {
+    /// Combines two gates using a union operation.
+    /// The resulting gate allows any slots allowed by either of the input gates.
+    pub fn union(&self, gate: &Self) -> Self {
+        match (self, gate) {
             (&Gate::Allow(ref ls), &Gate::Allow(ref rs)) => Gate::Allow(ls.union(rs).cloned().collect()),
             (&Gate::Allow(ref ls), &Gate::Block(ref rs)) => Gate::Block(rs.difference(ls).cloned().collect()),
             (&Gate::Block(ref ls), &Gate::Allow(ref rs)) => Gate::Block(ls.difference(rs).cloned().collect()),
@@ -59,13 +88,30 @@ impl Gate {
         }
     }
 
-    /// Produces a gate that allows all slots that would pass all of the input gates.
-    pub fn intersection(&self, other: &Self) -> Self {
-        match (self, other) {
+    /// Combines two gates using an intersection operation.
+    /// The resulting gate allows any slots allowed by both of the input gates.
+    pub fn intersection(&self, gate: &Self) -> Self {
+        match (self, gate) {
             (&Gate::Allow(ref ls), &Gate::Allow(ref rs)) => Gate::Allow(ls.intersection(rs).cloned().collect()),
             (&Gate::Allow(ref ls), &Gate::Block(ref rs)) => Gate::Allow(ls.difference(rs).cloned().collect()),
             (&Gate::Block(ref ls), &Gate::Allow(ref rs)) => Gate::Allow(rs.difference(ls).cloned().collect()),
             (&Gate::Block(ref ls), &Gate::Block(ref rs)) => Gate::Block(ls.union(rs).cloned().collect()),
+        }
+    }
+
+    /// Combines two gates using a difference operation.
+    /// The resulting gate allows any slots allowed by the first, but not the second, input gate.
+    pub fn difference(&self, gate: &Self) -> Self {
+        self.intersection(&gate.invert())
+    }
+
+    /// Combines two gates using a symmetric difference operation.
+    /// The resulting gate allows any slots allowed by exactly one of input gates.
+    pub fn sym_difference(&self, gate: &Self) -> Self {
+        let slots: SlotSet = self.slots().symmetric_difference(&gate.slots()).cloned().collect();
+        match (self, gate) {
+            (&Gate::Allow(_), &Gate::Allow(_)) | (&Gate::Block(_), &Gate::Block(_)) => Gate::Allow(slots),
+            (&Gate::Allow(_), &Gate::Block(_)) | (&Gate::Block(_), &Gate::Allow(_)) => Gate::Block(slots),
         }
     }
 }
@@ -243,6 +289,70 @@ mod tests {
                 let u_is_allowed = produced.allows_slot(slot);
 
                 assert_eq!(l_is_allowed && r_is_allowed, u_is_allowed);
+            }
+        }
+    }
+
+    #[test]
+    fn test_difference() {
+        let inputs_and_expected = vec![
+            ((Gate::Allow(btreeset![0, 1, 2]), Gate::Allow(btreeset![2, 3, 4])),
+                Gate::Allow(btreeset![0, 1])),
+            ((Gate::Allow(btreeset![0, 1, 2]), Gate::Block(btreeset![2, 3, 4])),
+                Gate::Allow(btreeset![2])),
+            ((Gate::Block(btreeset![0, 1, 2]), Gate::Allow(btreeset![2, 3, 4])),
+                Gate::Block(btreeset![0, 1, 2, 3, 4])),
+            ((Gate::Block(btreeset![0, 1, 2]), Gate::Block(btreeset![2, 3, 4])),
+                Gate::Allow(btreeset![3, 4])),
+            ((Gate::Allow(btreeset![0, 1, 2]), Gate::Allow(btreeset![3, 4, 5])),
+                Gate::Allow(btreeset![0, 1, 2])),
+            ((Gate::Allow(btreeset![0, 1, 2]), Gate::Block(btreeset![0, 1, 2])),
+                Gate::Allow(btreeset![0, 1, 2])),
+        ];
+
+        for ((l_gate, r_gate), expected) in inputs_and_expected {
+            let produced = l_gate.difference(&r_gate);
+            assert_eq!(expected, produced);
+
+            // Manually perform the same logic that difference should provide.
+            for slot in 0u8..10 {
+                let l_is_allowed = l_gate.allows_slot(slot);
+                let r_is_allowed = r_gate.allows_slot(slot);
+                let u_is_allowed = produced.allows_slot(slot);
+
+                assert_eq!(l_is_allowed & !r_is_allowed, u_is_allowed);
+            }
+        }
+    }
+
+    #[test]
+    fn test_sym_difference() {
+        let inputs_and_expected = vec![
+            ((Gate::Allow(btreeset![0, 1, 2]), Gate::Allow(btreeset![2, 3, 4])),
+                Gate::Allow(btreeset![0, 1, 3, 4])),
+            ((Gate::Allow(btreeset![0, 1, 2]), Gate::Block(btreeset![2, 3, 4])),
+                Gate::Block(btreeset![0, 1, 3, 4])),
+            ((Gate::Block(btreeset![0, 1, 2]), Gate::Allow(btreeset![2, 3, 4])),
+                Gate::Block(btreeset![0, 1, 3, 4])),
+            ((Gate::Block(btreeset![0, 1, 2]), Gate::Block(btreeset![2, 3, 4])),
+                Gate::Allow(btreeset![0, 1, 3, 4])),
+            ((Gate::Allow(btreeset![0, 1, 2]), Gate::Allow(btreeset![3, 4, 5])),
+                Gate::Allow(btreeset![0, 1, 2, 3, 4, 5])),
+            ((Gate::Allow(btreeset![0, 1, 2]), Gate::Block(btreeset![0, 1, 2])),
+                Gate::Block(btreeset![])),
+        ];
+
+        for ((l_gate, r_gate), expected) in inputs_and_expected {
+            let produced = l_gate.sym_difference(&r_gate);
+            assert_eq!(expected, produced);
+
+            // Manually perform the same logic that symmetric difference should provide.
+            for slot in 0u8..10 {
+                let l_is_allowed = l_gate.allows_slot(slot);
+                let r_is_allowed = r_gate.allows_slot(slot);
+                let u_is_allowed = produced.allows_slot(slot);
+
+                assert_eq!(l_is_allowed ^ r_is_allowed, u_is_allowed);
             }
         }
     }
