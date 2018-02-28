@@ -1,3 +1,5 @@
+use std::collections::{HashMap, HashSet};
+
 use failure::Error;
 
 use variant::gate::Gate;
@@ -49,6 +51,20 @@ pub enum GateHopError {
 }
 
 impl GateHop {
+    pub fn push(gate: Gate) -> Self {
+        GateHop {
+            start: Some(gate),
+            close: None,
+        }
+    }
+
+    pub fn pop(gate: Gate) -> Self {
+        GateHop {
+            start: None,
+            close: Some(gate),
+        }
+    }
+
     pub fn apply(&self, stack: &mut Vec<Gate>) -> Result<(), Error> {
         if let &Some(ref gate) = &self.start {
             stack.push(gate.clone());
@@ -63,4 +79,61 @@ impl GateHop {
 
         Ok(())
     }
+}
+
+pub type GateHopSequence = Vec<GateHop>;
+
+/// Set of edge IDs outbound for a (implied) nodule.
+pub type OutEdgeIdSet = HashSet<EdgeId>;
+
+/// Maps nodules to the IDs of edges travelling out from that nodule.
+pub type NoduleOutEdgeMap = HashMap<Nodule, OutEdgeIdSet>;
+
+/// Maps edge IDs to their edge definitions.
+pub type EdgeLookupMap = HashMap<EdgeId, Edge>;
+
+pub enum ProcedureItem {
+    Token(Token),
+    GatedAltChoices(GatedAltChoices),
+}
+
+pub type ProcedureItemSequence = Vec<ProcedureItem>;
+
+pub struct GatedAlt {
+    proc_items: ProcedureItemSequence,
+    active_gate: Gate,
+}
+
+pub type GatedAltChoices = Vec<GatedAlt>;
+
+pub fn normalize_gated_alt_choices(gated_alt_choices: &GatedAltChoices) -> GatedAltChoices {
+    GatedAltChoices::new()
+}
+
+/// Connects two nodules together with an edge.
+/// This edge will contain information about the tokens present on it, as well as the stack commands on start and close.
+pub fn connect(
+    new_edge_id: EdgeId,
+    src_nodule: Nodule,
+    dst_nodule: Nodule,
+    nodule_out_edge_map: &mut NoduleOutEdgeMap,
+    edge_lookup_map: &mut EdgeLookupMap,
+    token_seq: Vec<Token>,
+    gate_hop: GateHop,
+)
+{
+    // A new edge needs to be created.
+    let edge = Edge{
+        id: new_edge_id,
+        src_nodule,
+        dst_nodule,
+        token_seq,
+        gate_hop,
+    };
+
+    // Add edge ID to nodule out edge map, creating if not already existing.
+    nodule_out_edge_map.entry(src_nodule).or_default().insert(new_edge_id);
+
+    // Add edge and edge ID to edge lookup map.
+    edge_lookup_map.insert(new_edge_id, edge);
 }
