@@ -23,8 +23,8 @@ impl Gate {
 
     /// Checks if a gate has 'allow' semantics (is a white list).
     pub fn is_allow(&self) -> bool {
-        match *self {
-            Gate::Allow(_) => true,
+        match self {
+            &Gate::Allow(_) => true,
             _ => false,
         }
     }
@@ -36,16 +36,16 @@ impl Gate {
 
     /// Checks if a gate is 'allow-all', blocking no slots.
     pub fn is_allow_all(&self) -> bool {
-        match *self {
-            Gate::Block(ref s) => s.is_empty(),
+        match self {
+            &Gate::Block(ref s) => s.is_empty(),
             _ => false,
         }
     }
 
     /// Checks if a gate is 'block-all', allowing no slots.
     pub fn is_block_all(&self) -> bool {
-        match *self {
-            Gate::Allow(ref s) => s.is_empty(),
+        match self {
+            &Gate::Allow(ref s) => s.is_empty(),
             _ => false,
         }
     }
@@ -67,9 +67,9 @@ impl Gate {
     }
 
     pub fn allows_slot(&self, slot: Slot) -> bool {
-        match *self {
-            Gate::Allow(ref s) => s.contains(&slot),
-            Gate::Block(ref s) => !s.contains(&slot),
+        match self {
+            &Gate::Allow(ref s) => s.contains(&slot),
+            &Gate::Block(ref s) => !s.contains(&slot),
         }
     }
 
@@ -175,6 +175,51 @@ mod tests {
         for (gate, expected) in gates_and_expected {
             let produced = gate.is_block();
             assert_eq!(expected, produced);
+        }
+    }
+
+    #[test]
+    fn test_is_allow_all() {
+        let gates_and_expected = vec![
+            (Gate::Allow(btreeset![]), false),
+            (Gate::Allow(btreeset![0, 1, 2]), false),
+            (Gate::Block(btreeset![]), true),
+            (Gate::Block(btreeset![0, 1, 2]), false),
+        ];
+
+        for (gate, expected) in gates_and_expected {
+            let produced = gate.is_allow_all();
+            assert_eq!(expected, produced);
+        }
+    }
+
+    #[test]
+    fn test_is_block_all() {
+        let gates_and_expected = vec![
+            (Gate::Allow(btreeset![]), true),
+            (Gate::Allow(btreeset![0, 1, 2]), false),
+            (Gate::Block(btreeset![]), false),
+            (Gate::Block(btreeset![0, 1, 2]), false),
+        ];
+
+        for (gate, expected) in gates_and_expected {
+            let produced = gate.is_block_all();
+            assert_eq!(expected, produced);
+        }
+    }
+
+    #[test]
+    fn test_slots() {
+        let gates_and_expected = vec![
+            (Gate::Allow(btreeset![]), btreeset![]),
+            (Gate::Allow(btreeset![0, 1, 2]), btreeset![0, 1, 2]),
+            (Gate::Block(btreeset![]), btreeset![]),
+            (Gate::Block(btreeset![0, 1, 2]), btreeset![0, 1, 2]),
+        ];
+
+        for (gate, expected) in gates_and_expected {
+            let produced = gate.slots();
+            assert_eq!(&expected, produced);
         }
     }
 
