@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, BTreeSet};
 
 use failure::Error;
 
@@ -75,51 +75,48 @@ pub type NoduleOutEdgeMap = HashMap<Nodule, OutEdgeIdSet>;
 /// Maps edge ids to their edge definitions.
 pub type EdgeLookupMap = HashMap<EdgeId, Edge>;
 
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
 pub enum ProcedureItem {
     Token(Token),
-    AltChoices(AltChoiceSeq),
+    AltChoices(AltChoiceSet),
 }
 
 pub type ProcedureItemSeq = Vec<ProcedureItem>;
 
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
 pub struct AltChoice {
     proc_items: ProcedureItemSeq,
     active_gate: Gate,
 }
 
-pub type AltChoiceSeq = Vec<AltChoice>;
+pub type AltChoiceSet = BTreeSet<AltChoice>;
 
 /// Processes alt choices to remove multiple null alts, and to ensure that the union of all of its
 /// contained gates allows all slots (i.e. is an allow-all gate).
-pub fn normalize_alt_choice_seq(alt_choice_seq: &AltChoiceSeq) -> AltChoiceSeq {
-    // TODO: Should this be recursive and normalize nested alt choices?
+pub fn normalize_alt_choices(alt_choice_set: &AltChoiceSet) -> AltChoiceSet {
     // Calculate the value of the else-filter, which contains all slots not explicitly allowed in the alt choice.
-    let union_gate = alt_choice_seq.into_iter().fold(Gate::block_all(), |red, ref ac| red.union(&ac.active_gate));
+    let union_gate = alt_choice_set.into_iter().fold(Gate::block_all(), |red, ref ac| red.union(&ac.active_gate));
 
-    // println!("Calculated union gate: {}", union_gate);
-
-    let mut alt_choice_seq: AltChoiceSeq = alt_choice_seq.to_vec();
+    // Clone and collect into a sequence for easier mutation later on.
+    let mut alt_choice_seq: Vec<AltChoice> = alt_choice_set.into_iter().cloned().collect();
 
     // If union gate is not allow-all, append an empty branch with the inverse of the union gate.
     // This provides an "escape hatch" for a case when a slot does not match any provided gate.
     if !union_gate.is_allow_all() {
         let coverage_ac = AltChoice{ proc_items: ProcedureItemSeq::new(), active_gate: union_gate.invert() };
-        // println!("Need to create inverted filter: {:?}", coverage_ac);
         alt_choice_seq.push(coverage_ac);
     }
 
     // Drop any alt choices that have a block-all gate.
-    let mut alt_choice_seq: AltChoiceSeq = alt_choice_seq.into_iter().filter(|ref ac| !ac.active_gate.is_block_all()).collect();
+    alt_choice_seq.retain(|ref ac| !ac.active_gate.is_block_all());
 
-    // TODO: Recurse to normalize nested alt choices.
-    for ac in &mut alt_choice_seq {
-        for proc_item in &mut ac.proc_items {
+    // Recurse to normalize nested alt choices.
+    for mut ac in &mut alt_choice_seq {
+        for mut proc_item in &mut ac.proc_items {
             match proc_item {
                 &mut ProcedureItem::Token(_) => {},
-                &mut ProcedureItem::AltChoices(ref mut ac_seq) => {
-                    *ac_seq = normalize_alt_choice_seq(ac_seq);
+                &mut ProcedureItem::AltChoices(ref mut acs) => {
+                    *acs = normalize_alt_choices(acs);
                 },
             };
         }
@@ -134,7 +131,7 @@ pub fn normalize_alt_choice_seq(alt_choice_seq: &AltChoiceSeq) -> AltChoiceSeq {
         *entry = entry.union(active_gate);
     }
 
-    proc_items_to_gate.into_iter().map(|(pi, ag)| AltChoice{ proc_items: pi.to_vec(), active_gate: ag }).collect::<AltChoiceSeq>()
+    proc_items_to_gate.into_iter().map(|(pi, ag)| AltChoice{ proc_items: pi.to_vec(), active_gate: ag }).collect::<AltChoiceSet>()
 }
 
 /// Contains the edges, tokens, and gates that comprise all the variants of a single recipe.
@@ -179,7 +176,7 @@ impl ProcedureGraph {
 #[cfg(test)]
 mod tests {
     use super::{AltChoice, ProcedureItem};
-    use super::normalize_alt_choice_seq;
+    use super::normalize_alt_choices;
 
     use std::collections::HashSet;
 
@@ -187,91 +184,91 @@ mod tests {
     use token::Token;
 
     #[test]
-    fn test_normalize_alt_choice_seq() {
+    fn test_normalize_alt_choices() {
         let inputs_and_expected = vec![
             (
-                vec![
+                btreeset![
                     AltChoice{ proc_items: vec![], active_gate: Gate::Allow(btreeset![0, 1, 2]) },
                 ],
-                hashset![
+                btreeset![
                     AltChoice{ proc_items: vec![], active_gate: Gate::Block(btreeset![]) },
                 ],
             ),
             (
-                vec![
+                btreeset![
                     AltChoice{ proc_items: vec![ProcedureItem::Token(Token)], active_gate: Gate::Allow(btreeset![0, 1, 2]) },
                     AltChoice{ proc_items: vec![ProcedureItem::Token(Token)], active_gate: Gate::Allow(btreeset![2, 3, 4]) },
                 ],
-                hashset![
+                btreeset![
                     AltChoice{ proc_items: vec![], active_gate: Gate::Block(btreeset![0, 1, 2, 3, 4]) },
                     AltChoice{ proc_items: vec![ProcedureItem::Token(Token)], active_gate: Gate::Allow(btreeset![0, 1, 2, 3, 4]) },
                 ],
             ),
             (
-                vec![
+                btreeset![
                     AltChoice{ proc_items: vec![ProcedureItem::Token(Token)], active_gate: Gate::Allow(btreeset![]) },
                     AltChoice{ proc_items: vec![ProcedureItem::Token(Token), ProcedureItem::Token(Token)], active_gate: Gate::Allow(btreeset![0, 1, 2]) },
                 ],
-                hashset![
+                btreeset![
                     AltChoice{ proc_items: vec![], active_gate: Gate::Block(btreeset![0, 1, 2]) },
                     AltChoice{ proc_items: vec![ProcedureItem::Token(Token), ProcedureItem::Token(Token)], active_gate: Gate::Allow(btreeset![0, 1, 2]) },
                 ],
             ),
             (
-                vec![
+                btreeset![
                     AltChoice{ proc_items: vec![ProcedureItem::Token(Token)], active_gate: Gate::Block(btreeset![]) },
                     AltChoice{ proc_items: vec![ProcedureItem::Token(Token), ProcedureItem::Token(Token)], active_gate: Gate::Allow(btreeset![0, 1, 2]) },
                 ],
-                hashset![
+                btreeset![
                     AltChoice{ proc_items: vec![ProcedureItem::Token(Token)], active_gate: Gate::Block(btreeset![]) },
                     AltChoice{ proc_items: vec![ProcedureItem::Token(Token), ProcedureItem::Token(Token)], active_gate: Gate::Allow(btreeset![0, 1, 2]) },
                 ],
             ),
             (
-                vec![],
-                hashset![
+                btreeset![],
+                btreeset![
                     AltChoice{ proc_items: vec![], active_gate: Gate::Block(btreeset![]) },
                 ],
             ),
             (
-                vec![
+                btreeset![
                     AltChoice{ proc_items: vec![ProcedureItem::Token(Token)], active_gate: Gate::Allow(btreeset![7]) },
-                    AltChoice{ proc_items: vec![ProcedureItem::AltChoices(vec![
+                    AltChoice{ proc_items: vec![ProcedureItem::AltChoices(btreeset![
                         AltChoice{ proc_items: vec![ProcedureItem::Token(Token)], active_gate: Gate::Block(btreeset![]) },
                         AltChoice{ proc_items: vec![], active_gate: Gate::Allow(btreeset![5]) },
                     ]), ProcedureItem::Token(Token)], active_gate: Gate::Allow(btreeset![0, 1, 2]) },
                 ],
-                hashset![
+                btreeset![
                     AltChoice{ proc_items: vec![ProcedureItem::Token(Token)], active_gate: Gate::Allow(btreeset![7]) },
-                    AltChoice{ proc_items: vec![ProcedureItem::AltChoices(vec![
+                    AltChoice{ proc_items: vec![ProcedureItem::AltChoices(btreeset![
                         AltChoice{ proc_items: vec![ProcedureItem::Token(Token)], active_gate: Gate::Block(btreeset![]) },
                         AltChoice{ proc_items: vec![], active_gate: Gate::Allow(btreeset![5]) },
                     ]), ProcedureItem::Token(Token)], active_gate: Gate::Allow(btreeset![0, 1, 2]) },
                     AltChoice{ proc_items: vec![], active_gate: Gate::Block(btreeset![0, 1, 2, 7]) },
                 ],
             ),
-            // (
-            //     vec![
-            //         AltChoice{ proc_items: vec![ProcedureItem::Token(Token)], active_gate: Gate::Allow(btreeset![7]) },
-            //         AltChoice{ proc_items: vec![ProcedureItem::AltChoices(vec![
-            //             AltChoice{ proc_items: vec![ProcedureItem::Token(Token)], active_gate: Gate::Block(btreeset![0, 1, 2]) },
-            //             AltChoice{ proc_items: vec![ProcedureItem::Token(Token), ProcedureItem::Token(Token)], active_gate: Gate::Allow(btreeset![5]) },
-            //         ]), ProcedureItem::Token(Token)], active_gate: Gate::Allow(btreeset![0, 1, 2]) },
-            //     ],
-            //     hashset![
-            //         AltChoice{ proc_items: vec![ProcedureItem::Token(Token)], active_gate: Gate::Allow(btreeset![7]) },
-            //         AltChoice{ proc_items: vec![ProcedureItem::AltChoices(vec![
-            //             AltChoice{ proc_items: vec![ProcedureItem::Token(Token)], active_gate: Gate::Block(btreeset![0, 1, 2]) },
-            //             AltChoice{ proc_items: vec![ProcedureItem::Token(Token), ProcedureItem::Token(Token)], active_gate: Gate::Allow(btreeset![5]) },
-            //             AltChoice{ proc_items: vec![], active_gate: Gate::Block(btreeset![0, 1, 2, 5]) },
-            //         ]), ProcedureItem::Token(Token)], active_gate: Gate::Allow(btreeset![0, 1, 2]) },
-            //         AltChoice{ proc_items: vec![], active_gate: Gate::Block(btreeset![0, 1, 2, 7]) },
-            //     ],
-            // ),
+            (
+                btreeset![
+                    AltChoice{ proc_items: vec![ProcedureItem::Token(Token)], active_gate: Gate::Allow(btreeset![7]) },
+                    AltChoice{ proc_items: vec![ProcedureItem::AltChoices(btreeset![
+                        AltChoice{ proc_items: vec![ProcedureItem::Token(Token)], active_gate: Gate::Block(btreeset![0, 1, 2]) },
+                        AltChoice{ proc_items: vec![ProcedureItem::Token(Token), ProcedureItem::Token(Token)], active_gate: Gate::Allow(btreeset![5]) },
+                    ]), ProcedureItem::Token(Token)], active_gate: Gate::Allow(btreeset![0, 1, 2]) },
+                ],
+                btreeset![
+                    AltChoice{ proc_items: vec![ProcedureItem::Token(Token)], active_gate: Gate::Allow(btreeset![7]) },
+                    AltChoice{ proc_items: vec![ProcedureItem::AltChoices(btreeset![
+                        AltChoice{ proc_items: vec![ProcedureItem::Token(Token)], active_gate: Gate::Block(btreeset![0, 1, 2]) },
+                        AltChoice{ proc_items: vec![ProcedureItem::Token(Token), ProcedureItem::Token(Token)], active_gate: Gate::Allow(btreeset![5]) },
+                        AltChoice{ proc_items: vec![], active_gate: Gate::Allow(btreeset![0, 1, 2]) },
+                    ]), ProcedureItem::Token(Token)], active_gate: Gate::Allow(btreeset![0, 1, 2]) },
+                    AltChoice{ proc_items: vec![], active_gate: Gate::Block(btreeset![0, 1, 2, 7]) },
+                ],
+            ),
         ];
 
         for (input, expected) in inputs_and_expected {
-            let produced = normalize_alt_choice_seq(&input).into_iter().collect::<HashSet<_>>();
+            let produced = normalize_alt_choices(&input);
             assert_eq!(expected, produced);
         }
     }
