@@ -18,8 +18,7 @@ pub struct Edge {
     src_nodule: Nodule,
     dst_nodule: Nodule,
     token_seq: Vec<Token>,
-    src_gate_cmd: Option<GateCmd>,
-    dst_gate_cmd: Option<GateCmd>,
+    gate: Gate,
 }
 
 /// Represents a move from a (implied) nodule along an edge to a new nodule.
@@ -35,6 +34,17 @@ pub struct GraphWalk {
     hop_seq: GraphHopSeq,
 }
 
+#[derive(Debug, Fail)]
+pub enum GateCmdError {
+    #[fail(display = "stack is empty")]
+    EmptyStack,
+    #[fail(display = "top of stack does not match; expected: {}, produced: {}", expected, produced)]
+    StackMismatch{
+        expected: Gate,
+        produced: Gate,
+    },
+}
+
 pub enum GateCmd {
     Push(Gate),
     Pop(Gate),
@@ -45,65 +55,16 @@ impl GateCmd {
         match self {
             &GateCmd::Push(ref gate) => { stack.push(gate.clone()); },
             &GateCmd::Pop(ref gate) => {
-                let popped: Gate = stack.pop().ok_or(GateHopError::EmptyStack)?;
+                let popped: Gate = stack.pop().ok_or(GateCmdError::EmptyStack)?;
 
                 // We expect that the top of the stack should match our expected close gate.
-                ensure!(*gate == popped, GateHopError::StackMismatch{expected: gate.clone(), produced: popped.clone()});
+                ensure!(*gate == popped, GateCmdError::StackMismatch{expected: gate.clone(), produced: popped.clone()});
             },
         }
 
         Ok(())
     }
 }
-
-pub struct GateHop {
-    start: Option<Gate>,
-    close: Option<Gate>,
-}
-
-#[derive(Debug, Fail)]
-pub enum GateHopError {
-    #[fail(display = "stack is empty")]
-    EmptyStack,
-    #[fail(display = "top of stack does not match; expected: {}, produced: {}", expected, produced)]
-    StackMismatch{
-        expected: Gate,
-        produced: Gate,
-    },
-}
-
-impl GateHop {
-    pub fn push(gate: Gate) -> Self {
-        GateHop {
-            start: Some(gate),
-            close: None,
-        }
-    }
-
-    pub fn pop(gate: Gate) -> Self {
-        GateHop {
-            start: None,
-            close: Some(gate),
-        }
-    }
-
-    pub fn apply(&self, stack: &mut Vec<Gate>) -> Result<(), Error> {
-        if let &Some(ref gate) = &self.start {
-            stack.push(gate.clone());
-        }
-
-        if let &Some(ref expected) = &self.close {
-            let produced: Gate = stack.pop().ok_or(GateHopError::EmptyStack)?;
-
-            // We expect that the top of the stack should match our expected close gate.
-            ensure!(*expected == produced, GateHopError::StackMismatch{expected: expected.clone(), produced: produced.clone()});
-        }
-
-        Ok(())
-    }
-}
-
-pub type GateHopSeq = Vec<GateHop>;
 
 /// Set of edge ids outbound for a (implied) nodule.
 pub type OutEdgeIdSet = HashSet<EdgeId>;
@@ -133,6 +94,7 @@ pub type AltChoiceSeq = Vec<AltChoice>;
 /// Processes alt choices to remove multiple null alts, and to ensure that the union of all of its
 /// contained gates allows all slots (i.e. is an allow-all gate).
 pub fn normalize_alt_choice_seq(alt_choice_seq: &AltChoiceSeq) -> AltChoiceSeq {
+    // TODO: Should this be recursive and normalize nested alt choices?
     // Calculate the value of the else-filter, which contains all slots not explicitly allowed in the alt choice.
     let union_gate = alt_choice_seq.into_iter().fold(Gate::block_all(), |red, ref ac| red.union(&ac.active_gate));
 
@@ -149,7 +111,19 @@ pub fn normalize_alt_choice_seq(alt_choice_seq: &AltChoiceSeq) -> AltChoiceSeq {
     }
 
     // Drop any alt choices that have a block-all gate.
-    let alt_choice_seq: AltChoiceSeq = alt_choice_seq.into_iter().filter(|ref ac| !ac.active_gate.is_block_all()).collect();
+    let mut alt_choice_seq: AltChoiceSeq = alt_choice_seq.into_iter().filter(|ref ac| !ac.active_gate.is_block_all()).collect();
+
+    // TODO: Recurse to normalize nested alt choices.
+    for ac in &mut alt_choice_seq {
+        for proc_item in &mut ac.proc_items {
+            match proc_item {
+                &mut ProcedureItem::Token(_) => {},
+                &mut ProcedureItem::AltChoices(ref mut ac_seq) => {
+                    *ac_seq = normalize_alt_choice_seq(ac_seq);
+                },
+            };
+        }
+    }
 
     // If any alt choices are identical, combine their gates.
     let mut proc_items_to_gate: HashMap<&ProcedureItemSeq, Gate> = hashmap![];
@@ -178,8 +152,7 @@ impl ProcedureGraph {
         src_nodule: Nodule,
         dst_nodule: Nodule,
         token_seq: TokenSeq,
-        src_gate_cmd: Option<GateCmd>,
-        dst_gate_cmd: Option<GateCmd>,
+        gate: Gate,
     )
     {
         // Create a new edge id,
@@ -192,8 +165,7 @@ impl ProcedureGraph {
             src_nodule,
             dst_nodule,
             token_seq,
-            src_gate_cmd,
-            dst_gate_cmd,
+            gate,
         };
 
         // Add edge id to nodule out edge map, creating if not already existing.
@@ -261,6 +233,41 @@ mod tests {
                     AltChoice{ proc_items: vec![], active_gate: Gate::Block(btreeset![]) },
                 ],
             ),
+            (
+                vec![
+                    AltChoice{ proc_items: vec![ProcedureItem::Token(Token)], active_gate: Gate::Allow(btreeset![7]) },
+                    AltChoice{ proc_items: vec![ProcedureItem::AltChoices(vec![
+                        AltChoice{ proc_items: vec![ProcedureItem::Token(Token)], active_gate: Gate::Block(btreeset![]) },
+                        AltChoice{ proc_items: vec![], active_gate: Gate::Allow(btreeset![5]) },
+                    ]), ProcedureItem::Token(Token)], active_gate: Gate::Allow(btreeset![0, 1, 2]) },
+                ],
+                hashset![
+                    AltChoice{ proc_items: vec![ProcedureItem::Token(Token)], active_gate: Gate::Allow(btreeset![7]) },
+                    AltChoice{ proc_items: vec![ProcedureItem::AltChoices(vec![
+                        AltChoice{ proc_items: vec![ProcedureItem::Token(Token)], active_gate: Gate::Block(btreeset![]) },
+                        AltChoice{ proc_items: vec![], active_gate: Gate::Allow(btreeset![5]) },
+                    ]), ProcedureItem::Token(Token)], active_gate: Gate::Allow(btreeset![0, 1, 2]) },
+                    AltChoice{ proc_items: vec![], active_gate: Gate::Block(btreeset![0, 1, 2, 7]) },
+                ],
+            ),
+            // (
+            //     vec![
+            //         AltChoice{ proc_items: vec![ProcedureItem::Token(Token)], active_gate: Gate::Allow(btreeset![7]) },
+            //         AltChoice{ proc_items: vec![ProcedureItem::AltChoices(vec![
+            //             AltChoice{ proc_items: vec![ProcedureItem::Token(Token)], active_gate: Gate::Block(btreeset![0, 1, 2]) },
+            //             AltChoice{ proc_items: vec![ProcedureItem::Token(Token), ProcedureItem::Token(Token)], active_gate: Gate::Allow(btreeset![5]) },
+            //         ]), ProcedureItem::Token(Token)], active_gate: Gate::Allow(btreeset![0, 1, 2]) },
+            //     ],
+            //     hashset![
+            //         AltChoice{ proc_items: vec![ProcedureItem::Token(Token)], active_gate: Gate::Allow(btreeset![7]) },
+            //         AltChoice{ proc_items: vec![ProcedureItem::AltChoices(vec![
+            //             AltChoice{ proc_items: vec![ProcedureItem::Token(Token)], active_gate: Gate::Block(btreeset![0, 1, 2]) },
+            //             AltChoice{ proc_items: vec![ProcedureItem::Token(Token), ProcedureItem::Token(Token)], active_gate: Gate::Allow(btreeset![5]) },
+            //             AltChoice{ proc_items: vec![], active_gate: Gate::Block(btreeset![0, 1, 2, 5]) },
+            //         ]), ProcedureItem::Token(Token)], active_gate: Gate::Allow(btreeset![0, 1, 2]) },
+            //         AltChoice{ proc_items: vec![], active_gate: Gate::Block(btreeset![0, 1, 2, 7]) },
+            //     ],
+            // ),
         ];
 
         for (input, expected) in inputs_and_expected {
