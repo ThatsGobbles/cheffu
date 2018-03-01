@@ -6,7 +6,7 @@ pub type Slot = u8;
 pub type SlotSet = BTreeSet<Slot>;
 
 /// Represents a filter on a recipe's logical variant pathway, allowing or restricting certain variants from proceeding.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Gate {
     Allow(SlotSet),
     Block(SlotSet),
