@@ -1,8 +1,6 @@
 use std::collections::{HashMap, HashSet, BTreeSet};
 
-use failure::Error;
-
-use variant::gate::Gate;
+use variant::gate::{Gate, GateOp};
 use token::{Token, TokenSeq};
 
 pub type UniqueId = u32;
@@ -17,53 +15,9 @@ pub struct Edge {
     id: EdgeId,
     src_nodule: Nodule,
     dst_nodule: Nodule,
-    token_seq: Vec<Token>,
-    gate: Gate,
-}
-
-/// Represents a move from a (implied) nodule along an edge to a new nodule.
-pub struct GraphHop {
-    edge_id: EdgeId,
-    dst_nodule: Nodule,
-}
-
-pub type GraphHopSeq = Vec<GraphHop>;
-
-pub struct GraphWalk {
-    start_nodule: Nodule,
-    hop_seq: GraphHopSeq,
-}
-
-#[derive(Debug, Fail)]
-pub enum GateCmdError {
-    #[fail(display = "stack is empty")]
-    EmptyStack,
-    #[fail(display = "top of stack does not match; expected: {}, produced: {}", expected, produced)]
-    StackMismatch{
-        expected: Gate,
-        produced: Gate,
-    },
-}
-
-pub enum GateCmd {
-    Push(Gate),
-    Pop(Gate),
-}
-
-impl GateCmd {
-    pub fn apply(&self, stack: &mut Vec<Gate>) -> Result<(), Error> {
-        match self {
-            &GateCmd::Push(ref gate) => { stack.push(gate.clone()); },
-            &GateCmd::Pop(ref gate) => {
-                let popped: Gate = stack.pop().ok_or(GateCmdError::EmptyStack)?;
-
-                // We expect that the top of the stack should match our expected close gate.
-                ensure!(*gate == popped, GateCmdError::StackMismatch{expected: gate.clone(), produced: popped.clone()});
-            },
-        }
-
-        Ok(())
-    }
+    token_seq: TokenSeq,
+    src_gate_op: Option<GateOp>,
+    dst_gate_op: Option<GateOp>,
 }
 
 /// Set of edge ids outbound for a (implied) nodule.
@@ -134,14 +88,45 @@ pub fn normalize_alt_choices(alt_choice_set: &AltChoiceSet) -> AltChoiceSet {
     proc_items_to_gate.into_iter().map(|(pi, ag)| AltChoice{ proc_items: pi.to_vec(), active_gate: ag }).collect::<AltChoiceSet>()
 }
 
+pub struct EdgeIdGen(EdgeId);
+
+impl EdgeIdGen {
+    pub fn advance(&mut self) -> EdgeId {
+        let to_return = self.0.clone();
+        self.0 += 1;
+        to_return
+    }
+}
+
+pub struct NoduleGen(Nodule);
+
+impl NoduleGen {
+    pub fn advance(&mut self) -> Nodule {
+        let to_return = self.0.clone();
+        self.0 += 1;
+        to_return
+    }
+}
+
 /// Contains the edges, tokens, and gates that comprise all the variants of a single recipe.
 pub struct ProcedureGraph {
     nodule_out_edge_map: NoduleOutEdgeMap,
     edge_lookup_map: EdgeLookupMap,
-    curr_edge_id: EdgeId,
+    edge_id_gen: EdgeIdGen,
+    nodule_gen: NoduleGen,
 }
 
 impl ProcedureGraph {
+    /// Creates a new `ProcedureGraph`.
+    pub fn new() -> Self {
+        ProcedureGraph {
+            nodule_out_edge_map: NoduleOutEdgeMap::new(),
+            edge_lookup_map: EdgeLookupMap::new(),
+            edge_id_gen: EdgeIdGen(0),
+            nodule_gen: NoduleGen(0),
+        }
+    }
+
     /// Connects two nodules together with an edge.
     /// This edge will contain information about the tokens present on it, as well as the stack commands on start and close.
     pub fn connect(
@@ -149,12 +134,12 @@ impl ProcedureGraph {
         src_nodule: Nodule,
         dst_nodule: Nodule,
         token_seq: TokenSeq,
-        gate: Gate,
+        src_gate_op: Option<GateOp>,
+        dst_gate_op: Option<GateOp>,
     )
     {
         // Create a new edge id,
-        let new_edge_id = self.curr_edge_id.clone();
-        self.curr_edge_id += 1;
+        let new_edge_id = self.edge_id_gen.advance();
 
         // A new edge needs to be created.
         let edge = Edge{
@@ -162,7 +147,8 @@ impl ProcedureGraph {
             src_nodule,
             dst_nodule,
             token_seq,
-            gate,
+            src_gate_op,
+            dst_gate_op,
         };
 
         // Add edge id to nodule out edge map, creating if not already existing.
@@ -171,14 +157,85 @@ impl ProcedureGraph {
         // Add edge and edge id to edge lookup map.
         self.edge_lookup_map.insert(new_edge_id, edge);
     }
+
+    pub fn process_procedure_item_seq(
+        &mut self,
+        procedure_item_seq: &ProcedureItemSeq,
+        src_nodule: Nodule,
+        dst_nodule: Nodule,
+        src_gate_op: Option<GateOp>,
+        dst_gate_op: Option<GateOp>,
+    )
+    {
+        // Keep track of the most recent src nodule.
+        let curr_src_nodule = src_nodule.clone();
+
+        // Collect tokens encountered directly on this procedure path.
+        let mut encountered_tokens: TokenSeq = vec![];
+
+        // LEARN: In this case `procedure_item_seq` is a reference, so `procedure_item` is as well.
+        for procedure_item in procedure_item_seq {
+            match procedure_item {
+                &ProcedureItem::Token(ref token) => {
+                    encountered_tokens.push(token.clone());
+                },
+                &ProcedureItem::AltChoices(ref alt_choices) => {
+                    // Create new src and dst nodules for the to-be-processed alt choices.
+                    let alt_src_nodule = self.nodule_gen.advance();
+                    let alt_dst_nodule = self.nodule_gen.advance();
+
+                    // Capture current list of encountered tokens.
+                    // Close off the current path by connecting to the new src nodule.
+                    self.connect(
+                        curr_src_nodule,
+                        alt_src_nodule,
+                        encountered_tokens,
+                        src_gate_op.clone(),
+                        dst_gate_op.clone(),
+                    );
+
+                    // # We only want to put the stack command on the first out path of a branch, not on any further down.
+                    // if start_slot_filter_stack_command is not None:
+                    //     start_slot_filter_stack_command = None
+
+                    // Reset encountered tokens.
+                    encountered_tokens = vec![];
+                },
+            };
+        }
+    }
+
+    pub fn process_alt_choice_set(
+        &mut self,
+        alt_choice_set: &AltChoiceSet,
+        src_nodule: Nodule,
+        dst_nodule: Nodule,
+
+    )
+    {
+        // Normalize the alt choices.
+        // Each of the resulting alt choices will be 'sandwiched' between the provided src and dst nodules.
+        let alt_choice_set = normalize_alt_choices(alt_choice_set);
+
+        for alt_choice in alt_choice_set {
+            let src_gate_op = Some(GateOp::Push(alt_choice.active_gate.clone()));
+            let dst_gate_op = Some(GateOp::Pop(alt_choice.active_gate.clone()));
+
+            self.process_procedure_item_seq(
+                &alt_choice.proc_items,
+                src_nodule,
+                dst_nodule,
+                src_gate_op,
+                dst_gate_op,
+            );
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{AltChoice, ProcedureItem};
     use super::normalize_alt_choices;
-
-    use std::collections::HashSet;
 
     use variant::gate::Gate;
     use token::Token;

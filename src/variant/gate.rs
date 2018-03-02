@@ -1,6 +1,8 @@
 use std::collections::BTreeSet;
 use std::fmt;
 
+use failure::Error;
+
 /// An identifier for a unique variant pathway through a recipe.
 pub type Slot = u8;
 pub type SlotSet = BTreeSet<Slot>;
@@ -108,10 +110,10 @@ impl Gate {
     /// Combines two gates using a symmetric difference operation.
     /// The resulting gate allows any slots allowed by exactly one of input gates.
     pub fn sym_difference(&self, gate: &Self) -> Self {
-        let slots: SlotSet = self.slots().symmetric_difference(&gate.slots()).cloned().collect();
+        let sym_diff_slots: SlotSet = self.slots().symmetric_difference(&gate.slots()).cloned().collect();
         match (self, gate) {
-            (&Gate::Allow(_), &Gate::Allow(_)) | (&Gate::Block(_), &Gate::Block(_)) => Gate::Allow(slots),
-            (&Gate::Allow(_), &Gate::Block(_)) | (&Gate::Block(_), &Gate::Allow(_)) => Gate::Block(slots),
+            (&Gate::Allow(_), &Gate::Allow(_)) | (&Gate::Block(_), &Gate::Block(_)) => Gate::Allow(sym_diff_slots),
+            (&Gate::Allow(_), &Gate::Block(_)) | (&Gate::Block(_), &Gate::Allow(_)) => Gate::Block(sym_diff_slots),
         }
     }
 }
@@ -132,9 +134,42 @@ impl fmt::Display for Gate {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum GateOp {
+    Push(Gate),
+    Pop(Gate),
+}
+
+impl GateOp {
+    pub fn apply(&self, stack: &mut Vec<Gate>) -> Result<(), Error> {
+        match self {
+            &GateOp::Push(ref gate) => { stack.push(gate.clone()); },
+            &GateOp::Pop(ref gate) => {
+                let popped: Gate = stack.pop().ok_or(GateOpError::EmptyStack)?;
+
+                // We expect that the top of the stack should match our expected close gate.
+                ensure!(*gate == popped, GateOpError::StackMismatch{expected: gate.clone(), produced: popped.clone()});
+            },
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Debug, Fail, PartialEq, Eq)]
+pub enum GateOpError {
+    #[fail(display = "stack is empty")]
+    EmptyStack,
+    #[fail(display = "top of stack does not match; expected: {}, produced: {}", expected, produced)]
+    StackMismatch{
+        expected: Gate,
+        produced: Gate,
+    },
+}
+
 #[cfg(test)]
 mod tests {
-    use super::Gate;
+    use super::{Gate, GateOp};
 
     #[test]
     fn test_allow_all() {
@@ -399,6 +434,72 @@ mod tests {
 
                 assert_eq!(l_is_allowed ^ r_is_allowed, u_is_allowed);
             }
+        }
+    }
+
+    #[test]
+    fn test_apply() {
+        // TODO: Revisit once `PartialEq` can be implemented for `Error`.
+        let inputs_and_expected = vec![
+            (
+                (
+                    GateOp::Push(Gate::Allow(btreeset![0])),
+                    vec![],
+                ),
+                (
+                    vec![Gate::Allow(btreeset![0])],
+                    false,
+                ),
+            ),
+            (
+                (
+                    GateOp::Push(Gate::Allow(btreeset![1])),
+                    vec![Gate::Allow(btreeset![0])],
+                ),
+                (
+                    vec![Gate::Allow(btreeset![0]), Gate::Allow(btreeset![1])],
+                    false,
+                ),
+            ),
+            (
+                (
+                    GateOp::Pop(Gate::Allow(btreeset![0])),
+                    vec![Gate::Allow(btreeset![0])],
+                ),
+                (
+                    vec![],
+                    false,
+                ),
+            ),
+            (
+                (
+                    GateOp::Pop(Gate::Allow(btreeset![0])),
+                    vec![],
+                ),
+                (
+                    vec![],
+                    true,
+                ),
+            ),
+            (
+                (
+                    GateOp::Pop(Gate::Allow(btreeset![0])),
+                    vec![Gate::Block(btreeset![0])],
+                ),
+                (
+                    vec![],
+                    true,
+                ),
+            ),
+        ];
+
+        for ((gate_op, initial), (expected_state, expected_failure)) in inputs_and_expected {
+            let mut initial = initial.clone();
+            let produced_failure = gate_op.apply(&mut initial).is_err();
+            let produced_state = initial;
+
+            assert_eq!(expected_state, produced_state);
+            assert_eq!(expected_failure, produced_failure);
         }
     }
 }
