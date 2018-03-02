@@ -1,11 +1,7 @@
-use std::collections::{HashMap, HashSet, BTreeSet};
-
-use failure::Error;
+use std::collections::{HashMap, BTreeSet};
 
 use variant::gate::{Slot, Gate};
-use token::{Token, TokenSeq};
-
-pub type Nodule = u32;
+use token::Token;
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
 pub enum ProcedureItem {
@@ -68,62 +64,6 @@ impl ProcedureGraph {
         }
 
         proc_items_to_gate.into_iter().map(|(pi, ag)| AltChoice{ proc_items: pi.to_vec(), active_gate: ag }).collect::<AltChoiceSet>()
-    }
-}
-
-#[derive(Debug, Fail, PartialEq, Eq)]
-pub enum GateStackError {
-    #[fail(display = "stack is empty")]
-    Empty,
-    #[fail(display = "top of stack does not match; expected: {}, produced: {}", expected, produced)]
-    Mismatch {
-        expected: Gate,
-        produced: Gate,
-    },
-    #[fail(display = "leftover items in stack; found: {:?}", leftover)]
-    Leftover {
-        leftover: Vec<Gate>,
-    },
-}
-
-/// Represents an item in a start-to-finish walk through a procedure graph.
-#[derive(Clone, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
-pub enum WalkItem<'a> {
-    Token(&'a Token),
-    Push(&'a Gate),
-    Pop(&'a Gate),
-}
-
-/// Represents a start-to-finish walk through a procedure graph.
-pub struct WalkItemSeq<'a>(Vec<WalkItem<'a>>);
-
-impl<'a> WalkItemSeq<'a> {
-    pub fn process(&self) -> Result<Vec<&Token>, Error> {
-        let mut gate_stack: Vec<&Gate> = vec![];
-        let mut tokens: Vec<&Token> = vec![];
-
-        for walk_item in &self.0 {
-            // LEARN: In here, `walk_item` is a reference.
-            match walk_item {
-                &WalkItem::Token(token) => {
-                    tokens.push(token);
-                },
-                &WalkItem::Push(gate) => {
-                    gate_stack.push(gate);
-                },
-                &WalkItem::Pop(gate) => {
-                    let popped: &Gate = gate_stack.pop().ok_or(GateStackError::Empty)?;
-
-                    // We expect that the top of the stack should match our expected close gate.
-                    ensure!(gate == popped, GateStackError::Mismatch{expected: gate.clone(), produced: popped.clone()});
-                },
-            }
-        }
-
-        // LEARN: `.cloned()` calls `.clone()` on each element of an iterator.
-        ensure!(gate_stack.is_empty(), GateStackError::Leftover{leftover: gate_stack.into_iter().cloned().collect()});
-
-        Ok(tokens)
     }
 }
 

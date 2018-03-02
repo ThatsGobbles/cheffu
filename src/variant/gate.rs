@@ -1,8 +1,6 @@
 use std::collections::BTreeSet;
 use std::fmt;
 
-use failure::Error;
-
 /// An identifier for a unique variant pathway through a recipe.
 pub type Slot = u8;
 pub type SlotSet = BTreeSet<Slot>;
@@ -15,10 +13,12 @@ pub enum Gate {
 }
 
 impl Gate {
+    /// Creates a gate that allows every slot.
     pub fn allow_all() -> Self {
         Gate::Block(btreeset![])
     }
 
+    /// Creates a gate that blocks every slot.
     pub fn block_all() -> Self {
         Gate::Allow(btreeset![])
     }
@@ -133,28 +133,6 @@ impl fmt::Display for Gate {
         write!(f, "{}({:?})", name, slots)
     }
 }
-
-// #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-// pub enum GateOp {
-//     Push(Gate),
-//     Pop(Gate),
-// }
-
-// impl GateOp {
-//     pub fn apply(&self, stack: &mut Vec<Gate>) -> Result<(), Error> {
-//         match self {
-//             &GateOp::Push(ref gate) => { stack.push(gate.clone()); },
-//             &GateOp::Pop(ref gate) => {
-//                 let popped: Gate = stack.pop().ok_or(GateOpError::EmptyStack)?;
-
-//                 // We expect that the top of the stack should match our expected close gate.
-//                 ensure!(*gate == popped, GateOpError::StackMismatch{expected: gate.clone(), produced: popped.clone()});
-//             },
-//         }
-
-//         Ok(())
-//     }
-// }
 
 #[cfg(test)]
 mod tests {
@@ -425,70 +403,4 @@ mod tests {
             }
         }
     }
-
-    // #[test]
-    // fn test_apply() {
-    //     // TODO: Revisit once `PartialEq` can be implemented for `Error`.
-    //     let inputs_and_expected = vec![
-    //         (
-    //             (
-    //                 GateOp::Push(Gate::Allow(btreeset![0])),
-    //                 vec![],
-    //             ),
-    //             (
-    //                 vec![Gate::Allow(btreeset![0])],
-    //                 false,
-    //             ),
-    //         ),
-    //         (
-    //             (
-    //                 GateOp::Push(Gate::Allow(btreeset![1])),
-    //                 vec![Gate::Allow(btreeset![0])],
-    //             ),
-    //             (
-    //                 vec![Gate::Allow(btreeset![0]), Gate::Allow(btreeset![1])],
-    //                 false,
-    //             ),
-    //         ),
-    //         (
-    //             (
-    //                 GateOp::Pop(Gate::Allow(btreeset![0])),
-    //                 vec![Gate::Allow(btreeset![0])],
-    //             ),
-    //             (
-    //                 vec![],
-    //                 false,
-    //             ),
-    //         ),
-    //         (
-    //             (
-    //                 GateOp::Pop(Gate::Allow(btreeset![0])),
-    //                 vec![],
-    //             ),
-    //             (
-    //                 vec![],
-    //                 true,
-    //             ),
-    //         ),
-    //         (
-    //             (
-    //                 GateOp::Pop(Gate::Allow(btreeset![0])),
-    //                 vec![Gate::Block(btreeset![0])],
-    //             ),
-    //             (
-    //                 vec![],
-    //                 true,
-    //             ),
-    //         ),
-    //     ];
-
-    //     for ((gate_op, initial), (expected_state, expected_failure)) in inputs_and_expected {
-    //         let mut initial = initial.clone();
-    //         let produced_failure = gate_op.apply(&mut initial).is_err();
-    //         let produced_state = initial;
-
-    //         assert_eq!(expected_state, produced_state);
-    //         assert_eq!(expected_failure, produced_failure);
-    //     }
-    // }
 }
