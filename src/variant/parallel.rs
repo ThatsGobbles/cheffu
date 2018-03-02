@@ -96,7 +96,7 @@ impl ProcedureGraph {
 }
 
 #[derive(Debug, Fail, PartialEq, Eq)]
-pub enum GateOpError {
+pub enum GateStackError {
     #[fail(display = "stack is empty")]
     EmptyStack,
     #[fail(display = "top of stack does not match; expected: {}, produced: {}", expected, produced)]
@@ -136,16 +136,16 @@ impl<'a> WalkItemSeq<'a> {
                     gate_stack.push(gate);
                 },
                 &WalkItem::Pop(gate) => {
-                    let popped: &Gate = gate_stack.pop().ok_or(GateOpError::EmptyStack)?;
+                    let popped: &Gate = gate_stack.pop().ok_or(GateStackError::EmptyStack)?;
 
                     // We expect that the top of the stack should match our expected close gate.
-                    ensure!(gate == popped, GateOpError::StackMismatch{expected: gate.clone(), produced: popped.clone()});
+                    ensure!(gate == popped, GateStackError::StackMismatch{expected: gate.clone(), produced: popped.clone()});
                 },
             }
         }
 
         // LEARN: `.cloned()` calls `.clone()` on each element of an iterator.
-        ensure!(gate_stack.is_empty(), GateOpError::StackLeftover{leftover: gate_stack.into_iter().cloned().collect()});
+        ensure!(gate_stack.is_empty(), GateStackError::StackLeftover{leftover: gate_stack.into_iter().cloned().collect()});
 
         Ok(tokens)
     }
