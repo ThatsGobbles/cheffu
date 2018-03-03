@@ -7,15 +7,34 @@ use token::Token;
 pub enum GateStackError {
     #[fail(display = "stack is empty")]
     Empty,
+
     #[fail(display = "top of stack does not match; expected: {}, produced: {}", expected, produced)]
     Mismatch {
         expected: Gate,
         produced: Gate,
     },
+
     #[fail(display = "leftover items in stack; found: {:?}", leftover)]
     Leftover {
         leftover: Vec<Gate>,
     },
+}
+
+#[derive(Debug, Fail, PartialEq, Eq)]
+pub enum SlotError {
+    // TODO: Make error message more clear.
+    #[fail(display = "not enough slot choices provided")]
+    Insufficient,
+
+    #[fail(display = "expected slot not allowed by gate; gate: {}, slot: {}", gate, slot)]
+    Mismatch {
+        gate: Gate,
+        slot: Slot,
+    },
+
+    // TODO: Make error message more clear.
+    #[fail(display = "too many slot choices provided")]
+    Leftover,
 }
 
 /// Represents an item in a start-to-finish walk through a procedure graph.
@@ -30,9 +49,13 @@ pub enum WalkItem<'a> {
 pub struct WalkItemSeq<'a>(Vec<WalkItem<'a>>);
 
 impl<'a> WalkItemSeq<'a> {
-    pub fn process(&self) -> Result<Vec<&Token>, Error> {
+    pub fn process<II>(&self, slot_iter: II) -> Result<Vec<&Token>, Error>
+    where II: IntoIterator<Item = Slot>,
+    {
         let mut gate_stack: Vec<&Gate> = vec![];
         let mut tokens: Vec<&Token> = vec![];
+
+        let mut slot_iter = slot_iter.into_iter();
 
         for walk_item in &self.0 {
             // LEARN: In here, `walk_item` is a reference.
@@ -41,6 +64,9 @@ impl<'a> WalkItemSeq<'a> {
                     tokens.push(token);
                 },
                 &WalkItem::Push(gate) => {
+                    // Get the next expected slot.
+                    // let next_slot = slot_iter.next().ok_or(SlotError::Insufficient)?;
+
                     gate_stack.push(gate);
                 },
                 &WalkItem::Pop(gate) => {
@@ -116,7 +142,7 @@ mod tests {
         ];
 
         for (input, expected) in inputs_and_expected {
-            let produced = input.process().ok();
+            let produced = input.process(vec![]).ok();
 
             assert_eq!(expected, produced);
         }
