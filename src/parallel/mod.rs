@@ -1,4 +1,4 @@
 pub mod gate;
-pub mod parallel;
+pub mod pathway;
 pub mod walk;
 pub mod scope;

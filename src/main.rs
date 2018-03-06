@@ -4,7 +4,7 @@
 #[macro_use] extern crate failure;
 #[macro_use] extern crate failure_derive;
 
-mod variant;
+mod parallel;
 mod token;
 
 fn main() {}

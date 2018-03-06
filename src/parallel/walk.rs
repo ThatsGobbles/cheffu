@@ -1,6 +1,6 @@
 use failure::Error;
 
-use variant::gate::{Slot, Gate};
+use super::gate::{Slot, Gate};
 use token::Token;
 
 #[derive(Debug, Fail, PartialEq, Eq)]
@@ -88,8 +88,8 @@ impl<'a> WalkItemSeq<'a> {
 #[cfg(test)]
 mod tests {
     use super::{WalkItem, WalkItemSeq};
+    use super::super::gate::Gate;
     use token::Token;
-    use variant::gate::Gate;
 
     #[test]
     fn test_process() {
