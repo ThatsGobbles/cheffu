@@ -6,6 +6,14 @@ use super::gate::{Slot, Gate};
 use super::scope::Scope;
 use token::Token;
 
+macro_rules! splitset {
+    ( $($split:expr),* $(,)? ) => (SplitSet(btreeset!($($split),*)));
+}
+
+macro_rules! flow {
+    ( $($split:expr),* $(,)? ) => (Flow(vec!($($split),*)));
+}
+
 #[derive(Clone, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
 pub enum FlowItem {
     Token(Token),
@@ -21,8 +29,41 @@ pub struct Split {
 #[derive(Clone, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
 pub struct SplitSet(BTreeSet<Split>);
 
-macro_rules! splitset {
-    ( $($split:expr),* $(,)? ) => (SplitSet(btreeset!($($split),*)));
+impl SplitSet {
+    pub fn new<II: IntoIterator<Item = Split>>(splits: II) -> Self {
+        SplitSet(SplitSet::normalize_splits(splits))
+    }
+
+    /// Processes split choices to coalesce identical split choices, and to ensure that the union of all of its
+    /// contained gates allows all slots (i.e. is an allow-all gate).
+    pub fn normalize_splits<II: IntoIterator<Item = Split>>(splits: II) -> BTreeSet<Split> {
+        // Clone and collect into a sequence for easier mutation later on.
+        let mut split_seq: Vec<Split> = splits.into_iter().collect();
+
+        // Calculate the union gate, which allows all slots allowed in any of the split choices.
+        let union_gate = &split_seq.iter().fold(Gate::block_all(), |red, ref spl| red.union(&spl.active_gate));
+
+        // If union gate is not allow-all, append an empty branch with the inverse of the union gate.
+        // This provides an "escape hatch" for a case when a slot does not match any provided gate.
+        if !union_gate.is_allow_all() {
+            let coverage_ac = Split{ subflow: flow![], active_gate: union_gate.invert() };
+            split_seq.push(coverage_ac);
+        }
+
+        // Drop any split choices that have a block-all gate.
+        split_seq.retain(|ref ac| !ac.active_gate.is_block_all());
+
+        // If any split choices are identical, combine their gates.
+        let mut subflow_to_gate: HashMap<&Flow, Gate> = hashmap![];
+        for ac in &split_seq {
+            let subflow = &ac.subflow;
+            let active_gate = &ac.active_gate;
+            let entry = subflow_to_gate.entry(subflow).or_insert(Gate::block_all());
+            *entry = entry.union(active_gate);
+        }
+
+        subflow_to_gate.into_iter().map(|(pi, ag)| Split{ subflow: pi.clone(), active_gate: ag }).collect::<BTreeSet<Split>>()
+    }
 }
 
 impl<'a> IntoIterator for &'a SplitSet {
@@ -46,10 +87,6 @@ impl IntoIterator for SplitSet {
 /// Contains the tokens and splits that comprise all the variants of a single recipe.
 #[derive(Clone, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
 pub struct Flow(Vec<FlowItem>);
-
-macro_rules! flow {
-    ( $($split:expr),* $(,)? ) => (Flow(vec!($($split),*)));
-}
 
 impl<'a> IntoIterator for &'a Flow {
     type Item = &'a FlowItem;
