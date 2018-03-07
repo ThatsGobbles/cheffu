@@ -34,6 +34,15 @@ impl<'a> IntoIterator for &'a SplitSet {
     }
 }
 
+impl IntoIterator for SplitSet {
+    type Item = Split;
+    type IntoIter = <BTreeSet<Split> as IntoIterator>::IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
 /// Contains the tokens and splits that comprise all the variants of a single recipe.
 #[derive(Clone, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
 pub struct Flow(Vec<FlowItem>);
@@ -42,14 +51,23 @@ macro_rules! flow {
     ( $($split:expr),* $(,)? ) => (Flow(vec!($($split),*)));
 }
 
-// impl<'a> IntoIterator for &'a Flow {
-//     type Item = &'a FlowItem;
-//     type IntoIter = <&'a Vec<FlowItem> as IntoIterator>::IntoIter;
+impl<'a> IntoIterator for &'a Flow {
+    type Item = &'a FlowItem;
+    type IntoIter = <&'a Vec<FlowItem> as IntoIterator>::IntoIter;
 
-//     fn into_iter(self) -> Self::IntoIter {
-//         self.0.iter()
-//     }
-// }
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter()
+    }
+}
+
+impl IntoIterator for Flow {
+    type Item = FlowItem;
+    type IntoIter = <Vec<FlowItem> as IntoIterator>::IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
 
 impl Flow {
     /// Processes split choices to coalesce identical split choices, and to ensure that the union of all of its

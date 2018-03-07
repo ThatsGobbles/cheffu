@@ -1,7 +1,7 @@
 use failure::Error;
 
 use super::gate::{Gate, Slot};
-use super::pathway::{FlowItem, Flow};
+use super::flow::{FlowItem, Flow};
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct Scope {
