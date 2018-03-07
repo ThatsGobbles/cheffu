@@ -1,12 +1,12 @@
 use failure::Error;
 
 use super::gate::{Gate, Slot};
-use super::pathway::{PathwayItem, Pathway};
+use super::pathway::{FlowItem, Flow};
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct Scope {
-    // The active slot is used to determine the path(s) to take when spelunking into one of this scope's subscopes.
-    active_slot: Slot,
+    // The active gate is used to determine what slots can be chosen when spelunking into one of this scope's subscopes.
+    active_gate: Gate,
 
     // A sequence of subscopes contined in this scope.
     // Each of these are keyed to this containing scope's active slot.
@@ -15,8 +15,8 @@ pub struct Scope {
 }
 
 impl Scope {
-    pub fn new(active_slot: Slot, subscopes: Vec<Scope>) -> Self {
-        Scope { active_slot, subscopes }
+    pub fn new(active_gate: Gate, subscopes: Vec<Scope>) -> Self {
+        Scope { active_gate, subscopes }
     }
 }
 
