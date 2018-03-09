@@ -4,8 +4,10 @@
 #[macro_use] extern crate maplit;
 #[macro_use] extern crate failure;
 #[macro_use] extern crate failure_derive;
+#[macro_use] extern crate nom;
 
 mod parallel;
 mod token;
+mod parser;
 
 fn main() {}
