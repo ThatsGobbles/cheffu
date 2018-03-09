@@ -8,7 +8,7 @@ const ACTN_SIGIL: char = '=';
 const COMB_SIGIL: char = '/';
 
 named!(pub integer_repr<&str, &str>,
-    recognize!(complete!(nom::digit))
+    recognize!(nom::digit)
 );
 
 named!(pub nz_integer_repr<&str, &str>,
@@ -16,39 +16,31 @@ named!(pub nz_integer_repr<&str, &str>,
 );
 
 named!(pub decimal_repr<&str, &str>,
-    recognize!(tuple!(
+    recognize!(complete!(tuple!(
         integer_repr,
         tag!("."),
         integer_repr
-    ))
+    )))
 );
 
 named!(pub nz_decimal_repr<&str, &str>,
     recognize!(alt!(
-        tuple!(
+        complete!(tuple!(
             nz_integer_repr,
-            opt!(complete!(
-                tuple!(
-                    tag!("."),
-                    integer_repr
-                )
-            ))
-        )
-        | tuple!(
+            tag!("."),
+            integer_repr
+        ))
+        | complete!(tuple!(
             integer_repr,
-            opt!(complete!(
-                tuple!(
-                    tag!("."),
-                    nz_integer_repr
-                )
-            ))
-        )
+            tag!("."),
+            nz_integer_repr
+        ))
     ))
 );
 
 #[cfg(test)]
 mod tests {
-    use super::{integer_repr, nz_integer_repr, decimal_repr};
+    use super::{integer_repr, nz_integer_repr, decimal_repr, nz_decimal_repr};
 
     use nom::{IResult, ErrorKind};
 
@@ -97,15 +89,39 @@ mod tests {
         let inputs_and_expected = vec![
             ("1234.0", IResult::Done("", "1234.0")),
             ("0.1234", IResult::Done("", "0.1234")),
+            ("010.010", IResult::Done("", "010.010")),
             (".1234", IResult::Error(ErrorKind::Digit)),
             ("1234.", IResult::Error(ErrorKind::Complete)),
             ("0.0", IResult::Done("", "0.0")),
+            ("0.000", IResult::Done("", "0.000")),
+            ("000.000", IResult::Done("", "000.000")),
             (".0", IResult::Error(ErrorKind::Digit)),
             ("0.", IResult::Error(ErrorKind::Complete)),
         ];
 
         for (input, expected) in inputs_and_expected {
             let produced = decimal_repr(input);
+            assert_eq!(expected, produced);
+        }
+    }
+
+    #[test]
+    fn test_nz_decimal_repr() {
+        let inputs_and_expected = vec![
+            ("1234.0", IResult::Done("", "1234.0")),
+            ("0.1234", IResult::Done("", "0.1234")),
+            ("010.010", IResult::Done("", "010.010")),
+            (".1234", IResult::Error(ErrorKind::Alt)),
+            ("1234.", IResult::Error(ErrorKind::Alt)),
+            ("0.0", IResult::Error(ErrorKind::Alt)),
+            ("0.000", IResult::Error(ErrorKind::Alt)),
+            ("000.000", IResult::Error(ErrorKind::Alt)),
+            (".0", IResult::Error(ErrorKind::Alt)),
+            ("0.", IResult::Error(ErrorKind::Alt)),
+        ];
+
+        for (input, expected) in inputs_and_expected {
+            let produced = nz_decimal_repr(input);
             assert_eq!(expected, produced);
         }
     }
