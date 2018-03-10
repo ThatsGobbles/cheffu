@@ -7,6 +7,7 @@ authors = ["Mark LeMoine <thatsgobbles@gmail.com>"]
 maplit = "1.0.0"
 failure = "0.1.1"
 failure_derive = "0.1.1"
+regex = "0.2"
 
 [dependencies.nom]
 version = "^3.2"
