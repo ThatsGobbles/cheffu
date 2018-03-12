@@ -45,7 +45,8 @@ impl Flow {
         Flow(flow)
     }
 
-    pub fn find_walks(&self) {
+    // TODO: This will probably need either a Gate or Slot as input.
+    pub fn find_walks(&self) -> Vec<Vec<&Token>> {
         fn helper(curr_flow_item: &FlowItem, curr_walk_path: &Vec<&Token>) {
             // It is possible to have more than one new path output from this helper.
             let next_walk_paths: Vec<Vec<&Token>> = match curr_flow_item {
@@ -55,13 +56,20 @@ impl Flow {
                     vec![result]
                 },
                 &FlowItem::Split(ref split_set) => {
-                    for split in split_set {
+                    let mut results: Vec<Vec<&Token>> = vec![];
 
+                    let mut split_walks = split_set.find_walks();
+                    for mut split_walk in &mut split_walks {
+                        let mut result = curr_walk_path.clone();
+                        result.append(&mut split_walk);
+                        results.push(result);
                     }
 
-                    vec![]
+                    results
                 },
             };
         }
+
+        vec![]
     }
 }

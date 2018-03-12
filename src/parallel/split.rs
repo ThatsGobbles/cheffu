@@ -2,6 +2,7 @@ use std::collections::{HashMap, BTreeSet};
 
 use super::gate::Gate;
 use super::flow::{Flow};
+use token::Token;
 
 macro_rules! splitset {
     ( $($split:expr),* $(,)? ) => (SplitSet::new(btreeset!($($split),*)));
@@ -11,6 +12,12 @@ macro_rules! splitset {
 pub struct Split {
     subflow: Flow,
     active_gate: Gate,
+}
+
+impl Split {
+    pub fn find_walks(&self) -> Vec<Vec<&Token>> {
+        vec![]
+    }
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
@@ -64,6 +71,10 @@ impl SplitSet {
         }
 
         subflow_to_gate.into_iter().map(|(pi, ag)| Split{ subflow: pi, active_gate: ag }).collect::<BTreeSet<Split>>()
+    }
+
+    pub fn find_walks(&self) -> Vec<Vec<&Token>> {
+        self.0.iter().flat_map(|s| s.find_walks()).collect()
     }
 }
 
