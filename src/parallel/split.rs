@@ -40,6 +40,7 @@ impl SplitSet {
         // Drop any split choices that have a block-all gate.
         split_seq.retain(|ref ac| !ac.active_gate.is_block_all());
 
+        // NOTE: Recursing is not needed if this is always built in a bottom up style.
         // // Recurse to normalize nested splits.
         // for mut ac in &mut split_seq {
         //     for mut path_item in &mut ac.subflow.0 {

@@ -44,4 +44,24 @@ impl Flow {
     pub fn new(flow: Vec<FlowItem>) -> Self {
         Flow(flow)
     }
+
+    pub fn find_walks(&self) {
+        fn helper(curr_flow_item: &FlowItem, curr_walk_path: &Vec<&Token>) {
+            // It is possible to have more than one new path output from this helper.
+            let next_walk_paths: Vec<Vec<&Token>> = match curr_flow_item {
+                &FlowItem::Token(ref token) => {
+                    let mut result = curr_walk_path.clone();
+                    result.push(token);
+                    vec![result]
+                },
+                &FlowItem::Split(ref split_set) => {
+                    for split in split_set {
+
+                    }
+
+                    vec![]
+                },
+            };
+        }
+    }
 }
