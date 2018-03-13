@@ -1,12 +1,10 @@
+#![macro_use]
+
 use std::collections::{HashMap, BTreeSet};
 
 use super::gate::{Gate, Slot};
 use super::flow::{Flow};
 use token::Token;
-
-macro_rules! splitset {
-    ( $($split:expr),* $(,)? ) => (SplitSet::new(btreeset!($($split),*)));
-}
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
 pub struct Split {
@@ -15,6 +13,10 @@ pub struct Split {
 }
 
 impl Split {
+    pub fn new(subflow: Flow, active_gate: Gate) -> Self {
+        Split { subflow, active_gate }
+    }
+
     pub fn find_walks(&self, target_slot: Slot, slot_stack: &mut Vec<Slot>) -> Vec<Vec<&Token>> {
         // Check if the slot is allowed by the active gate.
         if !self.active_gate.allows_slot(target_slot) {

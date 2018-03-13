@@ -1,3 +1,5 @@
+#![macro_use]
+
 use std::collections::BTreeSet;
 use std::fmt;
 
@@ -13,6 +15,14 @@ pub enum Gate {
 }
 
 impl Gate {
+    pub fn new_allow<II: IntoIterator<Item = Slot>>(slots: II) -> Self {
+        Gate::Allow(slots.into_iter().collect())
+    }
+
+    pub fn new_block<II: IntoIterator<Item = Slot>>(slots: II) -> Self {
+        Gate::Block(slots.into_iter().collect())
+    }
+
     /// Creates a gate that allows every slot.
     pub fn allow_all() -> Self {
         Gate::Block(btreeset![])
