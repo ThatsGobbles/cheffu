@@ -1,6 +1,6 @@
 use std::collections::{HashMap, BTreeSet};
 
-use super::gate::Gate;
+use super::gate::{Gate, Slot};
 use super::flow::{Flow};
 use token::Token;
 
@@ -15,8 +15,15 @@ pub struct Split {
 }
 
 impl Split {
-    pub fn find_walks(&self) -> Vec<Vec<&Token>> {
-        vec![]
+    pub fn find_walks(&self, target_slot: Slot, slot_stack: &mut Vec<Slot>) -> Vec<Vec<&Token>> {
+        // Check if the slot is allowed by the active gate.
+        if !self.active_gate.allows_slot(target_slot) {
+            vec![]
+        }
+        else {
+            // Find all walks on the contained subflow.
+            self.subflow.find_walks(slot_stack)
+        }
     }
 }
 
@@ -73,8 +80,9 @@ impl SplitSet {
         subflow_to_gate.into_iter().map(|(pi, ag)| Split{ subflow: pi, active_gate: ag }).collect::<BTreeSet<Split>>()
     }
 
-    pub fn find_walks(&self) -> Vec<Vec<&Token>> {
-        self.0.iter().flat_map(|s| s.find_walks()).collect()
+    /// Produces all walks through the contained splits that allow a given slot.
+    pub fn find_walks(&self, target_slot: Slot, slot_stack: &mut Vec<Slot>) -> Vec<Vec<&Token>> {
+        self.0.iter().flat_map(|s| s.find_walks(target_slot, &mut slot_stack.clone())).collect()
     }
 }
 
