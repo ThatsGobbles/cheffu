@@ -1,6 +1,7 @@
 #![macro_use]
 
 use std::collections::{HashMap, BTreeSet};
+use std::borrow::Cow;
 
 use super::gate::{Gate, Slot};
 use super::flow::{Flow};
@@ -35,6 +36,40 @@ pub struct SplitSet(BTreeSet<Split>);
 impl SplitSet {
     pub fn new<II: IntoIterator<Item = Split>>(splits: II) -> Self {
         SplitSet(SplitSet::normalize_splits(splits))
+    }
+
+    pub fn cow_normalize_splits<'a, II: IntoIterator<Item = &'a Split>>(splits: II) -> BTreeSet<Cow<'a, Split>> {
+        // Clone and collect into a sequence for easier mutation later on.
+        let mut split_seq: Vec<Cow<'a, Split>> = splits.into_iter().map(|s| Cow::Borrowed(s)).collect();
+
+        // Calculate the union gate, which allows all slots allowed in any of the split choices.
+        let union_gate = &split_seq.iter().fold(Gate::block_all(), |red, ref s| red.union(&s.active_gate));
+
+        // If union gate is not allow-all, append an empty branch with the inverse of the union gate.
+        // This provides an "escape hatch" for a case when a slot does not match any provided gate.
+        if !union_gate.is_allow_all() {
+            split_seq.push(Cow::Owned(Split::new(flow![], union_gate.invert())));
+        }
+
+        // Drop any split choices that have a block-all gate.
+        split_seq.retain(|ref s| !s.active_gate.is_block_all());
+
+        // If any split choices are identical, combine their gates.
+        // TODO: Use splits as value, not gates.
+        let mut subflow_to_gate: HashMap<&Flow, Cow<Gate>> = hashmap![];
+        for split in &split_seq {
+            let subflow = &split.subflow;
+            let active_gate = &split.active_gate;
+
+            subflow_to_gate
+                .entry(subflow)
+                .and_modify(|g| { *g = Cow::Owned(g.union(active_gate)) })
+                .or_insert(Cow::Borrowed(active_gate));
+        }
+
+        // subflow_to_gate.into_iter().map(|(sf, ag)| {}).collect::<BTreeSet<Split>>()
+
+        btreeset![]
     }
 
     /// Processes split choices to coalesce identical split choices, and to ensure that the union of all of its
