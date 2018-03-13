@@ -3,8 +3,10 @@
 use std::collections::{HashMap, BTreeSet};
 use std::borrow::Cow;
 
+use failure::Error;
+
 use super::gate::{Gate, Slot};
-use super::flow::{Flow};
+use super::flow::{Flow, SlotStackError};
 use token::Token;
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
@@ -18,10 +20,11 @@ impl Split {
         Split { subflow, active_gate }
     }
 
-    pub fn find_walks(&self, target_slot: Slot, slot_stack: &mut Vec<Slot>) -> Vec<Vec<&Token>> {
+    pub fn find_walks(&self, target_slot: Slot, slot_stack: &mut Vec<Slot>) -> Result<Vec<Vec<&Token>>, Error> {
         // Check if the slot is allowed by the active gate.
         if !self.active_gate.allows_slot(target_slot) {
-            vec![]
+            // bail!(SlotStackError::Mismatch{expected: self.active_gate.clone(), produced: target_slot})
+            Ok(vec![])
         }
         else {
             // Find all walks on the contained subflow.
@@ -38,11 +41,13 @@ impl SplitSet {
         SplitSet(SplitSet::normalize_splits(splits))
     }
 
-    pub fn cow_normalize_splits<'a, II: IntoIterator<Item = &'a Split>>(splits: II) -> BTreeSet<Cow<'a, Split>> {
-        // Clone and collect into a sequence for easier mutation later on.
+    pub fn cow_normalize_splits<'a, II>(splits: II) -> BTreeSet<Cow<'a, Split>>
+    where II: IntoIterator<Item = &'a Split>
+    {
+        // Collect into a vector for easier mutation later on.
         let mut split_seq: Vec<Cow<'a, Split>> = splits.into_iter().map(|s| Cow::Borrowed(s)).collect();
 
-        // Calculate the union gate, which allows all slots allowed in any of the split choices.
+        // Calculate the union gate, which allows all slots allowed in any of the splits.
         let union_gate = &split_seq.iter().fold(Gate::block_all(), |red, ref s| red.union(&s.active_gate));
 
         // If union gate is not allow-all, append an empty branch with the inverse of the union gate.
@@ -51,11 +56,31 @@ impl SplitSet {
             split_seq.push(Cow::Owned(Split::new(flow![], union_gate.invert())));
         }
 
-        // Drop any split choices that have a block-all gate.
+        // Drop any splits that have a block-all gate.
         split_seq.retain(|ref s| !s.active_gate.is_block_all());
 
-        // If any split choices are identical, combine their gates.
-        // TODO: Use splits as value, not gates.
+        // If any splits have identical flows, combine/union their gates.
+        let mut subflow_to_split: HashMap<&Flow, Cow<Split>> = hashmap![];
+
+        // split_seq
+        //     .drain(0..)
+        //     .inspect(|c| println!("{:?}", c))
+        //     .map(|c_split: Cow<_>| {
+        //         subflow_to_split
+        //             .entry(&c_split.subflow)
+        //             .and_modify(|m_split| {
+        //                 *m_split = Cow::Owned(Split::new(c_split.subflow.clone(), c_split.active_gate.union(&m_split.active_gate)))
+        //             })
+        //             .or_insert(c_split);
+        //     });
+
+        // for split in split_seq {
+        //     subflow_to_split
+        //         .entry(&split.subflow)
+        //         .and_modify(|m_split| { *m_split = Cow::Owned(Split::new(split.subflow.clone(), split.active_gate.union(&m_split.active_gate))) })
+        //         .or_insert(Cow::Borrowed(&split));
+        // }
+
         let mut subflow_to_gate: HashMap<&Flow, Cow<Gate>> = hashmap![];
         for split in &split_seq {
             let subflow = &split.subflow;
@@ -118,8 +143,18 @@ impl SplitSet {
     }
 
     /// Produces all walks through the contained splits that allow a given slot.
-    pub fn find_walks(&self, target_slot: Slot, slot_stack: &mut Vec<Slot>) -> Vec<Vec<&Token>> {
-        self.0.iter().flat_map(|s| s.find_walks(target_slot, &mut slot_stack.clone())).collect()
+    pub fn find_walks(&self, target_slot: Slot, slot_stack: &mut Vec<Slot>) -> Result<Vec<Vec<&Token>>, Error> {
+        // // self.0.iter().flat_map(|s| s.find_walks(target_slot, &mut slot_stack.clone())).collect()
+        // let results: Result<Vec<Vec<Vec<&Token>>>, _> = self.0.iter().map(|s| s.find_walks(target_slot, &mut slot_stack.clone())).collect();
+        // results.map(|walks| walks.iter().flat_map(|walk| walk))
+
+        let mut results: Vec<Vec<&Token>> = vec![];
+        for split in &self.0 {
+            let mut split_result = split.find_walks(target_slot, &mut slot_stack.clone())?;
+            results.append(&mut split_result);
+        }
+
+        Ok(results)
     }
 }
 
