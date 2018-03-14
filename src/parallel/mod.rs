@@ -5,7 +5,7 @@ macro_rules! splitset {
 }
 
 macro_rules! flow {
-    ( $($split:expr),* $(,)? ) => (Flow::new(vec!($($split),*)));
+    ( $($flow_item:expr),* $(,)? ) => (Flow::new(vec!($($flow_item),*)));
 }
 
 macro_rules! allow {
