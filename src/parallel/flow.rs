@@ -1,14 +1,12 @@
 #![macro_use]
 
-use std::collections::VecDeque;
+use std::collections::{BTreeSet, HashMap};
 use std::iter::{IntoIterator, FromIterator};
 use std::borrow::Cow;
 
 use failure::Error;
 
 use super::gate::{Slot, Gate};
-use super::scope::Scope;
-use super::split::{Split, SplitSet};
 use token::Token;
 
 #[derive(Debug, Fail, PartialEq, Eq)]
@@ -23,56 +21,56 @@ pub enum SlotStackError {
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
-pub enum FlowItem {
+pub enum FlowItem<'a> {
     Token(Token),
-    Split(SplitSet),
+    Split(SplitSet<'a>),
 }
 
 /// Contains the tokens and splits that comprise all the variants of a single recipe.
 #[derive(Clone, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
-pub struct Flow(Vec<FlowItem>);
+pub struct Flow<'a>(Vec<FlowItem<'a>>);
 
-impl<'a> IntoIterator for &'a Flow {
-    type Item = &'a FlowItem;
-    type IntoIter = <&'a Vec<FlowItem> as IntoIterator>::IntoIter;
+impl<'a> IntoIterator for &'a Flow<'a> {
+    type Item = &'a FlowItem<'a>;
+    type IntoIter = <&'a Vec<FlowItem<'a>> as IntoIterator>::IntoIter;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.iter()
     }
 }
 
-impl<'a> IntoIterator for &'a mut Flow {
-    type Item = &'a mut FlowItem;
-    type IntoIter = <&'a mut Vec<FlowItem> as IntoIterator>::IntoIter;
+impl<'a> IntoIterator for &'a mut Flow<'a> {
+    type Item = &'a mut FlowItem<'a>;
+    type IntoIter = <&'a mut Vec<FlowItem<'a>> as IntoIterator>::IntoIter;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.iter_mut()
     }
 }
 
-impl IntoIterator for Flow {
-    type Item = FlowItem;
-    type IntoIter = <Vec<FlowItem> as IntoIterator>::IntoIter;
+impl<'a> IntoIterator for Flow<'a> {
+    type Item = FlowItem<'a>;
+    type IntoIter = <Vec<FlowItem<'a>> as IntoIterator>::IntoIter;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
     }
 }
 
-impl<'a> From<Flow> for Cow<'a, Flow> {
-    fn from(flow: Flow) -> Self {
+impl<'a> From<Flow<'a>> for Cow<'a, Flow<'a>> {
+    fn from(flow: Flow<'a>) -> Self {
         Cow::Owned(flow)
     }
 }
 
-impl<'a> From<&'a Flow> for Cow<'a, Flow> {
-    fn from(flow: &'a Flow) -> Self {
+impl<'a> From<&'a Flow<'a>> for Cow<'a, Flow<'a>> {
+    fn from(flow: &'a Flow<'a>) -> Self {
         Cow::Borrowed(flow)
     }
 }
 
-impl Flow {
-    pub fn new(flow: Vec<FlowItem>) -> Self {
+impl<'a> Flow<'a> {
+    pub fn new(flow: Vec<FlowItem<'a>>) -> Self {
         Flow(flow)
     }
 
@@ -121,61 +119,334 @@ impl Flow {
     }
 }
 
+#[derive(Clone, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
+pub struct Split<'a> {
+    flow: Cow<'a, Flow<'a>>,
+    gate: Cow<'a, Gate>,
+}
+
+impl<'a> Split<'a> {
+    pub fn new<F, G>(flow: F, gate: G) -> Self
+    where F: Into<Cow<'a, Flow<'a>>>,
+          G: Into<Cow<'a, Gate>>,
+    {
+        Split { flow: flow.into(), gate: gate.into() }
+    }
+
+    pub fn find_walks(&self, target_slot: Slot, slot_stack: &mut Vec<Slot>) -> Result<Vec<Vec<&Token>>, Error> {
+        // Check if the slot is allowed by the active gate.
+        if !self.gate.allows_slot(target_slot) {
+            // NOTE: This is a single-element result.
+            // TODO: This should never happen with proper normalization, might be better to error.
+            Ok(vec![vec![]])
+        }
+        else {
+            // Find all walks on the contained flow.
+            self.flow.find_walks(slot_stack)
+        }
+    }
+}
+
+#[derive(Clone, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
+pub struct SplitSet<'a>(BTreeSet<Split<'a>>);
+
+impl<'a> SplitSet<'a> {
+    pub fn new<II>(splits: II) -> Self
+    where II: IntoIterator<Item = Split<'a>>
+    {
+        SplitSet(splits.into_iter().collect())
+    }
+
+    pub fn normalize_splits<'b, II>(splits: II) -> BTreeSet<Split<'b>>
+    where II: IntoIterator<Item = Split<'b>>
+    {
+        // Collect into a vector for easier mutation later on.
+        let mut split_seq: Vec<_> = splits.into_iter().collect();
+
+        // Calculate the union gate, which allows all slots allowed in any of the splits.
+        let union_gate = &split_seq.iter().fold(Gate::block_all(), |red, ref s| red.union(&s.gate));
+
+        // If union gate is not allow-all, append an empty branch with the inverse of the union gate.
+        // This provides an "escape hatch" for a case when a slot does not match any provided gate.
+        if !union_gate.is_allow_all() {
+            split_seq.push(Split::new(flow![], union_gate.invert()));
+        }
+
+        // Drop any splits that have a block-all gate.
+        split_seq.retain(|ref s| !s.gate.is_block_all());
+
+        // NOTE: Recursing is not needed if this is always built in a bottom up style, but nice to have.
+        // TODO: Fix to work with `Cow`.
+        // // Recurse to normalize nested splits.
+        // for mut ac in &mut split_seq {
+        //     for mut path_item in &mut ac.flow.to_mut() {
+        //         match path_item {
+        //             &mut FlowItem::Token(_) => {},
+        //             &mut FlowItem::Split(ref mut splits) => {
+        //                 *splits = Flow::normalize_splits(splits);
+        //             },
+        //         };
+        //     }
+        // }
+
+        // If any splits have identical flows, combine/union their gates.
+        let mut flow_to_gate: HashMap<Cow<Flow>, Cow<Gate>> = hashmap![];
+
+        for split in split_seq {
+            let flow = split.flow;
+            let gate = split.gate;
+
+            flow_to_gate
+                .entry(flow)
+                .and_modify(|present| { *present = Cow::Owned(gate.union(&present)) })
+                .or_insert(gate);
+        }
+
+        flow_to_gate.into_iter().map(|(f, g)| Split::new(f, g)).collect::<BTreeSet<Split>>()
+    }
+
+    /// Produces all walks through the contained splits that allow a given slot.
+    pub fn find_walks(&self, target_slot: Slot, slot_stack: &mut Vec<Slot>) -> Result<Vec<Vec<&Token>>, Error> {
+        let mut results: Vec<Vec<&Token>> = vec![];
+        for split in &self.0 {
+            let mut split_result = split.find_walks(target_slot, &mut slot_stack.clone())?;
+            results.append(&mut split_result);
+        }
+
+        Ok(results)
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{Flow, FlowItem};
+    use super::{Flow, FlowItem, Split, SplitSet};
 
-    #[macro_use] use super::super::split::{Split, SplitSet};
     use super::super::gate::{Gate, Slot};
     use token::Token;
 
     #[test]
     fn test_find_walks() {
+        let token_a = Token::Ingredient("apple".to_string());
+        let token_b = Token::Ingredient("banana".to_string());
+        let token_c = Token::Ingredient("cherry".to_string());
+        let token_d = Token::Ingredient("date".to_string());
+
         let inputs_and_expected = vec![
-            ((flow![FlowItem::Token(Token)], vec![0: Slot]),
-                vec![vec![&Token]]),
-            ((flow![FlowItem::Token(Token), FlowItem::Token(Token)], vec![0]),
-                vec![vec![&Token, &Token]]),
+            ((flow![FlowItem::Token(token_a.clone())], vec![0: Slot]),
+                vec![vec![&token_a]]),
+            ((flow![FlowItem::Token(token_a.clone()), FlowItem::Token(token_b.clone())], vec![0]),
+                vec![vec![&token_a, &token_b]]),
             (
                 (
                     flow![
-                        FlowItem::Token(Token),
+                        FlowItem::Token(token_a.clone()),
                         FlowItem::Split(
                             splitset!(
                                 Split::new(
-                                    flow!(FlowItem::Token(Token)),
+                                    flow!(FlowItem::Token(token_b.clone())),
                                     allow!(0),
                                 ),
                             ),
                         ),
-                        FlowItem::Token(Token)
+                        FlowItem::Token(token_c.clone())
                     ],
                     vec![0]
                 ),
-                vec![vec![&Token, &Token, &Token]],
+                vec![vec![&token_a, &token_b, &token_c]],
             ),
-            // (
-            //     (
-            //         flow![
-            //             FlowItem::Token(Token),
-            //             FlowItem::Split(
-            //                 splitset!(
-            //                     Split::new(
-            //                         flow!(FlowItem::Token(Token)),
-            //                         allow!(0),
-            //                     ),
-            //                 ),
-            //             ),
-            //             FlowItem::Token(Token)
-            //         ],
-            //         vec![1]
-            //     ),
-            //     vec![vec![&Token, &Token]],
-            // ),
+            (
+                (
+                    flow![
+                        FlowItem::Token(token_a.clone()),
+                        FlowItem::Split(
+                            splitset!(
+                                Split::new(
+                                    flow!(FlowItem::Token(token_b.clone())),
+                                    allow!(0),
+                                ),
+                            ),
+                        ),
+                        FlowItem::Token(token_c.clone())
+                    ],
+                    vec![1]
+                ),
+                vec![vec![&token_a, &token_c]],
+            ),
+            (
+                (
+                    flow![
+                        FlowItem::Token(token_a.clone()),
+                        FlowItem::Split(
+                            splitset!(
+                                Split::new(
+                                    flow!(FlowItem::Token(token_b.clone())),
+                                    allow!(0),
+                                ),
+                            ),
+                        ),
+                        FlowItem::Token(token_c.clone()),
+                        FlowItem::Split(
+                            splitset!(
+                                Split::new(
+                                    flow!(FlowItem::Token(token_d.clone()), FlowItem::Token(token_a.clone())),
+                                    allow!(1),
+                                ),
+                            ),
+                        ),
+                    ],
+                    vec![1]
+                ),
+                vec![vec![&token_a, &token_c, &token_d, &token_a]],
+            ),
+            (
+                (
+                    flow![
+                        FlowItem::Token(token_a.clone()),
+                        FlowItem::Split(
+                            splitset!(
+                                Split::new(
+                                    flow!(FlowItem::Token(token_b.clone())),
+                                    allow!(0),
+                                ),
+                            ),
+                        ),
+                        FlowItem::Token(token_c.clone()),
+                        FlowItem::Split(
+                            splitset!(
+                                Split::new(
+                                    flow!(FlowItem::Token(token_d.clone()), FlowItem::Token(token_a.clone())),
+                                    allow!(1),
+                                ),
+                            ),
+                        ),
+                    ],
+                    vec![0]
+                ),
+                vec![vec![&token_a, &token_b, &token_c]],
+            ),
+            (
+                (
+                    flow![
+                        FlowItem::Token(token_a.clone()),
+                        FlowItem::Split(
+                            splitset!(
+                                Split::new(
+                                    flow!(FlowItem::Token(token_b.clone())),
+                                    allow!(0),
+                                ),
+                            ),
+                        ),
+                        FlowItem::Token(token_c.clone()),
+                        FlowItem::Split(
+                            splitset!(
+                                Split::new(
+                                    flow!(FlowItem::Token(token_d.clone()), FlowItem::Token(token_a.clone())),
+                                    allow!(1),
+                                ),
+                            ),
+                        ),
+                    ],
+                    vec![2]
+                ),
+                vec![vec![&token_a, &token_c]],
+            ),
         ];
 
         for ((flow, slot_stack), expected) in inputs_and_expected {
             let produced = flow.find_walks(&mut slot_stack.clone()).expect("Unable to find walks");
+            assert_eq!(expected, produced);
+        }
+    }
+
+    #[test]
+    fn test_normalize_splits() {
+        let token_a = Token::Ingredient("apple".to_string());
+
+        let inputs_and_expected = vec![
+            (
+                vec![
+                    Split::new(flow![], allow![0, 1, 2]),
+                ],
+                btreeset![
+                    Split::new(flow![], block![]),
+                ],
+            ),
+            (
+                vec![
+                    Split::new(flow![FlowItem::Token(token_a.clone())], allow![0, 1, 2]),
+                    Split::new(flow![FlowItem::Token(token_a.clone())], allow![2, 3, 4]),
+                ],
+                btreeset![
+                    Split::new(flow![], block![0, 1, 2, 3, 4]),
+                    Split::new(flow![FlowItem::Token(token_a.clone())], allow![0, 1, 2, 3, 4]),
+                ],
+            ),
+            (
+                vec![
+                    Split::new(flow![FlowItem::Token(token_a.clone())], allow![]),
+                    Split::new(flow![FlowItem::Token(token_a.clone()), FlowItem::Token(token_a.clone())], allow![0, 1, 2]),
+                ],
+                btreeset![
+                    Split::new(flow![], block![0, 1, 2]),
+                    Split::new(flow![FlowItem::Token(token_a.clone()), FlowItem::Token(token_a.clone())], allow![0, 1, 2]),
+                ],
+            ),
+            (
+                vec![
+                    Split::new(flow![FlowItem::Token(token_a.clone())], block![]),
+                    Split::new(flow![FlowItem::Token(token_a.clone()), FlowItem::Token(token_a.clone())], allow![0, 1, 2]),
+                ],
+                btreeset![
+                    Split::new(flow![FlowItem::Token(token_a.clone())], block![]),
+                    Split::new(flow![FlowItem::Token(token_a.clone()), FlowItem::Token(token_a.clone())], allow![0, 1, 2]),
+                ],
+            ),
+            (
+                vec![],
+                btreeset![
+                    Split::new(flow![], block![]),
+                ],
+            ),
+            (
+                vec![
+                    Split::new(flow![FlowItem::Token(token_a.clone())], allow![7]),
+                    Split::new(flow![FlowItem::Split(splitset![
+                        Split::new(flow![FlowItem::Token(token_a.clone())], block![]),
+                        Split::new(flow![], allow![5]),
+                    ]), FlowItem::Token(token_a.clone())], allow![0, 1, 2]),
+                ],
+                btreeset![
+                    Split::new(flow![FlowItem::Token(token_a.clone())], allow![7]),
+                    Split::new(flow![FlowItem::Split(splitset![
+                        Split::new(flow![FlowItem::Token(token_a.clone())], block![]),
+                        Split::new(flow![], allow![5]),
+                    ]), FlowItem::Token(token_a.clone())], allow![0, 1, 2]),
+                    Split::new(flow![], block![0, 1, 2, 7]),
+                ],
+            ),
+            // NOTE: This case tests recursive normalization.
+            // (
+            //     vec![
+            //         Split::new(flow![FlowItem::Token(token_a.clone())], allow![7]),
+            //         Split::new(flow![FlowItem::Split(splitset![
+            //             Split::new(flow![FlowItem::Token(token_a.clone())], block![0, 1, 2]),
+            //             Split::new(flow![FlowItem::Token(token_a.clone()), FlowItem::Token(token_a.clone())], allow![5]),
+            //         ]), FlowItem::Token(token_a.clone())], allow![0, 1, 2]),
+            //     ],
+            //     btreeset![
+            //         Split::new(flow![FlowItem::Token(token_a.clone())], allow![7]),
+            //         Split::new(flow![FlowItem::Split(splitset![
+            //             Split::new(flow![FlowItem::Token(token_a.clone())], block![0, 1, 2]),
+            //             Split::new(flow![FlowItem::Token(token_a.clone()), FlowItem::Token(token_a.clone())], allow![5]),
+            //             Split::new(flow![], allow![0, 1, 2]),
+            //         ]), FlowItem::Token(token_a.clone())], allow![0, 1, 2]),
+            //         Split::new(flow![], block![0, 1, 2, 7]),
+            //     ],
+            // ),
+        ];
+
+        for (input, expected) in inputs_and_expected {
+            let produced = SplitSet::normalize_splits(input);
             assert_eq!(expected, produced);
         }
     }
