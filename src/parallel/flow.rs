@@ -2,6 +2,7 @@
 
 use std::collections::VecDeque;
 use std::iter::{IntoIterator, FromIterator};
+use std::borrow::Cow;
 
 use failure::Error;
 
@@ -55,6 +56,18 @@ impl IntoIterator for Flow {
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
+    }
+}
+
+impl<'a> From<Flow> for Cow<'a, Flow> {
+    fn from(flow: Flow) -> Self {
+        Cow::Owned(flow)
+    }
+}
+
+impl<'a> From<&'a Flow> for Cow<'a, Flow> {
+    fn from(flow: &'a Flow) -> Self {
+        Cow::Borrowed(flow)
     }
 }
 

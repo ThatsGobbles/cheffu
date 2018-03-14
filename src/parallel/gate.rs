@@ -2,6 +2,7 @@
 
 use std::collections::BTreeSet;
 use std::fmt;
+use std::borrow::Cow;
 
 /// An identifier for a unique variant pathway through a recipe.
 pub type Slot = u8;
@@ -12,6 +13,18 @@ pub type SlotSet = BTreeSet<Slot>;
 pub enum Gate {
     Allow(SlotSet),
     Block(SlotSet),
+}
+
+impl<'a> From<Gate> for Cow<'a, Gate> {
+    fn from(gate: Gate) -> Self {
+        Cow::Owned(gate)
+    }
+}
+
+impl<'a> From<&'a Gate> for Cow<'a, Gate> {
+    fn from(gate: &'a Gate) -> Self {
+        Cow::Borrowed(gate)
+    }
 }
 
 impl Gate {
