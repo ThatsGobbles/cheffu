@@ -59,6 +59,19 @@ impl<'a> CowSplitSet<'a> {
         // Drop any splits that have a block-all gate.
         split_seq.retain(|ref s| !s.gate.is_block_all());
 
+        // NOTE: Recursing is not needed if this is always built in a bottom up style.
+        // Recurse to normalize nested splits.
+        // for mut ac in &mut split_seq {
+        //     for mut path_item in &mut ac.flow.to_mut() {
+        //         match path_item {
+        //             &mut FlowItem::Token(_) => {},
+        //             &mut FlowItem::Split(ref mut splits) => {
+        //                 *splits = Flow::normalize_splits(splits);
+        //             },
+        //         };
+        //     }
+        // }
+
         // If any splits have identical flows, combine/union their gates.
         let mut flow_to_gate: HashMap<Cow<CowFlow>, Cow<Gate>> = hashmap![];
 
@@ -89,83 +102,83 @@ mod tests {
         let inputs_and_expected = vec![
             (
                 vec![
-                    CowSplit::new(cflow![], Gate::Allow(btreeset![0, 1, 2])),
+                    CowSplit::new(cflow![], allow![0, 1, 2]),
                 ],
                 btreeset![
-                    CowSplit::new(cflow![], Gate::Block(btreeset![])),
+                    CowSplit::new(cflow![], block![]),
                 ],
             ),
             (
                 vec![
-                    CowSplit::new(cflow![CowFlowItem::Token(Token)], Gate::Allow(btreeset![0, 1, 2])),
-                    CowSplit::new(cflow![CowFlowItem::Token(Token)], Gate::Allow(btreeset![2, 3, 4])),
+                    CowSplit::new(cflow![CowFlowItem::Token(Token)], allow![0, 1, 2]),
+                    CowSplit::new(cflow![CowFlowItem::Token(Token)], allow![2, 3, 4]),
                 ],
                 btreeset![
-                    CowSplit::new(cflow![], Gate::Block(btreeset![0, 1, 2, 3, 4])),
-                    CowSplit::new(cflow![CowFlowItem::Token(Token)], Gate::Allow(btreeset![0, 1, 2, 3, 4])),
+                    CowSplit::new(cflow![], block![0, 1, 2, 3, 4]),
+                    CowSplit::new(cflow![CowFlowItem::Token(Token)], allow![0, 1, 2, 3, 4]),
                 ],
             ),
             (
                 vec![
-                    CowSplit::new(cflow![CowFlowItem::Token(Token)], Gate::Allow(btreeset![])),
-                    CowSplit::new(cflow![CowFlowItem::Token(Token), CowFlowItem::Token(Token)], Gate::Allow(btreeset![0, 1, 2])),
+                    CowSplit::new(cflow![CowFlowItem::Token(Token)], allow![]),
+                    CowSplit::new(cflow![CowFlowItem::Token(Token), CowFlowItem::Token(Token)], allow![0, 1, 2]),
                 ],
                 btreeset![
-                    CowSplit::new(cflow![], Gate::Block(btreeset![0, 1, 2])),
-                    CowSplit::new(cflow![CowFlowItem::Token(Token), CowFlowItem::Token(Token)], Gate::Allow(btreeset![0, 1, 2])),
+                    CowSplit::new(cflow![], block![0, 1, 2]),
+                    CowSplit::new(cflow![CowFlowItem::Token(Token), CowFlowItem::Token(Token)], allow![0, 1, 2]),
                 ],
             ),
             (
                 vec![
-                    CowSplit::new(cflow![CowFlowItem::Token(Token)], Gate::Block(btreeset![])),
-                    CowSplit::new(cflow![CowFlowItem::Token(Token), CowFlowItem::Token(Token)], Gate::Allow(btreeset![0, 1, 2])),
+                    CowSplit::new(cflow![CowFlowItem::Token(Token)], block![]),
+                    CowSplit::new(cflow![CowFlowItem::Token(Token), CowFlowItem::Token(Token)], allow![0, 1, 2]),
                 ],
                 btreeset![
-                    CowSplit::new(cflow![CowFlowItem::Token(Token)], Gate::Block(btreeset![])),
-                    CowSplit::new(cflow![CowFlowItem::Token(Token), CowFlowItem::Token(Token)], Gate::Allow(btreeset![0, 1, 2])),
+                    CowSplit::new(cflow![CowFlowItem::Token(Token)], block![]),
+                    CowSplit::new(cflow![CowFlowItem::Token(Token), CowFlowItem::Token(Token)], allow![0, 1, 2]),
                 ],
             ),
             (
                 vec![],
                 btreeset![
-                    CowSplit::new(cflow![], Gate::Block(btreeset![])),
+                    CowSplit::new(cflow![], block![]),
                 ],
             ),
             (
                 vec![
-                    CowSplit::new(cflow![CowFlowItem::Token(Token)], Gate::Allow(btreeset![7])),
+                    CowSplit::new(cflow![CowFlowItem::Token(Token)], allow![7]),
                     CowSplit::new(cflow![CowFlowItem::Split(csplitset![
-                        CowSplit::new(cflow![CowFlowItem::Token(Token)], Gate::Block(btreeset![])),
-                        CowSplit::new(cflow![], Gate::Allow(btreeset![5])),
-                    ]), CowFlowItem::Token(Token)], Gate::Allow(btreeset![0, 1, 2])),
+                        CowSplit::new(cflow![CowFlowItem::Token(Token)], block![]),
+                        CowSplit::new(cflow![], allow![5]),
+                    ]), CowFlowItem::Token(Token)], allow![0, 1, 2]),
                 ],
                 btreeset![
-                    CowSplit::new(cflow![CowFlowItem::Token(Token)], Gate::Allow(btreeset![7])),
+                    CowSplit::new(cflow![CowFlowItem::Token(Token)], allow![7]),
                     CowSplit::new(cflow![CowFlowItem::Split(csplitset![
-                        CowSplit::new(cflow![CowFlowItem::Token(Token)], Gate::Block(btreeset![])),
-                        CowSplit::new(cflow![], Gate::Allow(btreeset![5])),
-                    ]), CowFlowItem::Token(Token)], Gate::Allow(btreeset![0, 1, 2])),
-                    CowSplit::new(cflow![], Gate::Block(btreeset![0, 1, 2, 7])),
+                        CowSplit::new(cflow![CowFlowItem::Token(Token)], block![]),
+                        CowSplit::new(cflow![], allow![5]),
+                    ]), CowFlowItem::Token(Token)], allow![0, 1, 2]),
+                    CowSplit::new(cflow![], block![0, 1, 2, 7]),
                 ],
             ),
-            // (
-            //     vec![
-            //         CowSplit::new(cflow![CowFlowItem::Token(Token)], Gate::Allow(btreeset![7])),
-            //         CowSplit::new(cflow![CowFlowItem::Split(csplitset![
-            //             CowSplit::new(cflow![CowFlowItem::Token(Token)], Gate::Block(btreeset![0, 1, 2])),
-            //             CowSplit::new(cflow![CowFlowItem::Token(Token), CowFlowItem::Token(Token)], Gate::Allow(btreeset![5])),
-            //         ]), CowFlowItem::Token(Token)], Gate::Allow(btreeset![0, 1, 2])),
-            //     ],
-            //     btreeset![
-            //         CowSplit::new(cflow![CowFlowItem::Token(Token)], Gate::Allow(btreeset![7])),
-            //         CowSplit::new(cflow![CowFlowItem::Split(csplitset![
-            //             CowSplit::new(cflow![CowFlowItem::Token(Token)], Gate::Block(btreeset![0, 1, 2])),
-            //             CowSplit::new(cflow![CowFlowItem::Token(Token), CowFlowItem::Token(Token)], Gate::Allow(btreeset![5])),
-            //             CowSplit::new(cflow![], Gate::Allow(btreeset![0, 1, 2])),
-            //         ]), CowFlowItem::Token(Token)], Gate::Allow(btreeset![0, 1, 2])),
-            //         CowSplit::new(cflow![], Gate::Block(btreeset![0, 1, 2, 7])),
-            //     ],
-            // ),
+            (
+                vec![
+                    CowSplit::new(cflow![CowFlowItem::Token(Token)], allow![7]),
+                    CowSplit::new(cflow![CowFlowItem::Split(csplitset![
+                        CowSplit::new(cflow![CowFlowItem::Token(Token)], block![0, 1, 2]),
+                        CowSplit::new(cflow![CowFlowItem::Token(Token), CowFlowItem::Token(Token)], allow![5]),
+                    ]), CowFlowItem::Token(Token)], allow![0, 1, 2]),
+                ],
+                btreeset![
+                    CowSplit::new(cflow![CowFlowItem::Token(Token)], allow![7]),
+                    CowSplit::new(cflow![CowFlowItem::Split(csplitset![
+                        CowSplit::new(cflow![CowFlowItem::Token(Token)], block![0, 1, 2]),
+                        CowSplit::new(cflow![CowFlowItem::Token(Token), CowFlowItem::Token(Token)], allow![5]),
+                        CowSplit::new(cflow![], allow![0, 1, 2]),
+                    ]), CowFlowItem::Token(Token)], allow![0, 1, 2]),
+                    CowSplit::new(cflow![], block![0, 1, 2, 7]),
+                ],
+            ),
         ];
 
         for (input, expected) in inputs_and_expected {
