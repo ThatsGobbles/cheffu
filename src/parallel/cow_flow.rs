@@ -226,64 +226,69 @@ mod tests {
 
     #[test]
     fn test_find_walks() {
+        let token_a = Token::Ingredient("apple".to_string());
+        let token_b = Token::Ingredient("banana".to_string());
+        let token_c = Token::Ingredient("cherry".to_string());
+        let token_d = Token::Ingredient("date".to_string());
+
         let inputs_and_expected = vec![
-            ((cflow![CowFlowItem::Token(Token)], vec![0: Slot]),
-                vec![vec![&Token]]),
-            ((cflow![CowFlowItem::Token(Token), CowFlowItem::Token(Token)], vec![0]),
-                vec![vec![&Token, &Token]]),
+            ((cflow![CowFlowItem::Token(token_a.clone())], vec![0: Slot]),
+                vec![vec![&token_a]]),
+            ((cflow![CowFlowItem::Token(token_a.clone()), CowFlowItem::Token(token_b.clone())], vec![0]),
+                vec![vec![&token_a, &token_b]]),
             (
                 (
                     cflow![
-                        CowFlowItem::Token(Token),
+                        CowFlowItem::Token(token_a.clone()),
                         CowFlowItem::Split(
                             csplitset!(
                                 CowSplit::new(
-                                    cflow!(CowFlowItem::Token(Token)),
+                                    cflow!(CowFlowItem::Token(token_b.clone())),
                                     allow!(0),
                                 ),
                             ),
                         ),
-                        CowFlowItem::Token(Token)
+                        CowFlowItem::Token(token_c.clone())
                     ],
                     vec![0]
                 ),
-                vec![vec![&Token, &Token, &Token]],
+                vec![vec![&token_a, &token_b, &token_c]],
             ),
             (
                 (
                     cflow![
-                        CowFlowItem::Token(Token),
+                        CowFlowItem::Token(token_a.clone()),
                         CowFlowItem::Split(
                             csplitset!(
                                 CowSplit::new(
-                                    cflow!(CowFlowItem::Token(Token)),
+                                    cflow!(CowFlowItem::Token(token_b.clone())),
                                     allow!(0),
                                 ),
                             ),
                         ),
-                        CowFlowItem::Token(Token)
+                        CowFlowItem::Token(token_c.clone())
                     ],
                     vec![1]
                 ),
-                vec![vec![&Token, &Token]],
+                vec![vec![&token_a, &token_c]],
             ),
             (
                 (
                     cflow![
-                        CowFlowItem::Token(Token),
+                        CowFlowItem::Token(token_a.clone()),
                         CowFlowItem::Split(
                             csplitset!(
                                 CowSplit::new(
-                                    cflow!(CowFlowItem::Token(Token)),
+                                    cflow!(CowFlowItem::Token(token_b.clone())),
                                     allow!(0),
                                 ),
                             ),
                         ),
-                        CowFlowItem::Token(Token),
+                        CowFlowItem::Token(token_c.clone()),
                         CowFlowItem::Split(
                             csplitset!(
                                 CowSplit::new(
-                                    cflow!(CowFlowItem::Token(Token), CowFlowItem::Token(Token)),
+                                    cflow!(CowFlowItem::Token(token_d.clone()), CowFlowItem::Token(token_a.clone())),
                                     allow!(1),
                                 ),
                             ),
@@ -291,25 +296,25 @@ mod tests {
                     ],
                     vec![1]
                 ),
-                vec![vec![&Token, &Token, &Token, &Token]],
+                vec![vec![&token_a, &token_c, &token_d, &token_a]],
             ),
             (
                 (
                     cflow![
-                        CowFlowItem::Token(Token),
+                        CowFlowItem::Token(token_a.clone()),
                         CowFlowItem::Split(
                             csplitset!(
                                 CowSplit::new(
-                                    cflow!(CowFlowItem::Token(Token)),
+                                    cflow!(CowFlowItem::Token(token_b.clone())),
                                     allow!(0),
                                 ),
                             ),
                         ),
-                        CowFlowItem::Token(Token),
+                        CowFlowItem::Token(token_c.clone()),
                         CowFlowItem::Split(
                             csplitset!(
                                 CowSplit::new(
-                                    cflow!(CowFlowItem::Token(Token), CowFlowItem::Token(Token)),
+                                    cflow!(CowFlowItem::Token(token_d.clone()), CowFlowItem::Token(token_a.clone())),
                                     allow!(1),
                                 ),
                             ),
@@ -317,25 +322,25 @@ mod tests {
                     ],
                     vec![0]
                 ),
-                vec![vec![&Token, &Token, &Token]],
+                vec![vec![&token_a, &token_b, &token_c]],
             ),
             (
                 (
                     cflow![
-                        CowFlowItem::Token(Token),
+                        CowFlowItem::Token(token_a.clone()),
                         CowFlowItem::Split(
                             csplitset!(
                                 CowSplit::new(
-                                    cflow!(CowFlowItem::Token(Token)),
+                                    cflow!(CowFlowItem::Token(token_b.clone())),
                                     allow!(0),
                                 ),
                             ),
                         ),
-                        CowFlowItem::Token(Token),
+                        CowFlowItem::Token(token_c.clone()),
                         CowFlowItem::Split(
                             csplitset!(
                                 CowSplit::new(
-                                    cflow!(CowFlowItem::Token(Token), CowFlowItem::Token(Token)),
+                                    cflow!(CowFlowItem::Token(token_d.clone()), CowFlowItem::Token(token_a.clone())),
                                     allow!(1),
                                 ),
                             ),
@@ -343,7 +348,7 @@ mod tests {
                     ],
                     vec![2]
                 ),
-                vec![vec![&Token, &Token]],
+                vec![vec![&token_a, &token_c]],
             ),
         ];
 
@@ -355,6 +360,8 @@ mod tests {
 
     #[test]
     fn test_normalize_splits() {
+        let token_a = Token::Ingredient("apple".to_string());
+
         let inputs_and_expected = vec![
             (
                 vec![
@@ -366,32 +373,32 @@ mod tests {
             ),
             (
                 vec![
-                    CowSplit::new(cflow![CowFlowItem::Token(Token)], allow![0, 1, 2]),
-                    CowSplit::new(cflow![CowFlowItem::Token(Token)], allow![2, 3, 4]),
+                    CowSplit::new(cflow![CowFlowItem::Token(token_a.clone())], allow![0, 1, 2]),
+                    CowSplit::new(cflow![CowFlowItem::Token(token_a.clone())], allow![2, 3, 4]),
                 ],
                 btreeset![
                     CowSplit::new(cflow![], block![0, 1, 2, 3, 4]),
-                    CowSplit::new(cflow![CowFlowItem::Token(Token)], allow![0, 1, 2, 3, 4]),
+                    CowSplit::new(cflow![CowFlowItem::Token(token_a.clone())], allow![0, 1, 2, 3, 4]),
                 ],
             ),
             (
                 vec![
-                    CowSplit::new(cflow![CowFlowItem::Token(Token)], allow![]),
-                    CowSplit::new(cflow![CowFlowItem::Token(Token), CowFlowItem::Token(Token)], allow![0, 1, 2]),
+                    CowSplit::new(cflow![CowFlowItem::Token(token_a.clone())], allow![]),
+                    CowSplit::new(cflow![CowFlowItem::Token(token_a.clone()), CowFlowItem::Token(token_a.clone())], allow![0, 1, 2]),
                 ],
                 btreeset![
                     CowSplit::new(cflow![], block![0, 1, 2]),
-                    CowSplit::new(cflow![CowFlowItem::Token(Token), CowFlowItem::Token(Token)], allow![0, 1, 2]),
+                    CowSplit::new(cflow![CowFlowItem::Token(token_a.clone()), CowFlowItem::Token(token_a.clone())], allow![0, 1, 2]),
                 ],
             ),
             (
                 vec![
-                    CowSplit::new(cflow![CowFlowItem::Token(Token)], block![]),
-                    CowSplit::new(cflow![CowFlowItem::Token(Token), CowFlowItem::Token(Token)], allow![0, 1, 2]),
+                    CowSplit::new(cflow![CowFlowItem::Token(token_a.clone())], block![]),
+                    CowSplit::new(cflow![CowFlowItem::Token(token_a.clone()), CowFlowItem::Token(token_a.clone())], allow![0, 1, 2]),
                 ],
                 btreeset![
-                    CowSplit::new(cflow![CowFlowItem::Token(Token)], block![]),
-                    CowSplit::new(cflow![CowFlowItem::Token(Token), CowFlowItem::Token(Token)], allow![0, 1, 2]),
+                    CowSplit::new(cflow![CowFlowItem::Token(token_a.clone())], block![]),
+                    CowSplit::new(cflow![CowFlowItem::Token(token_a.clone()), CowFlowItem::Token(token_a.clone())], allow![0, 1, 2]),
                 ],
             ),
             (
@@ -402,37 +409,37 @@ mod tests {
             ),
             (
                 vec![
-                    CowSplit::new(cflow![CowFlowItem::Token(Token)], allow![7]),
+                    CowSplit::new(cflow![CowFlowItem::Token(token_a.clone())], allow![7]),
                     CowSplit::new(cflow![CowFlowItem::Split(csplitset![
-                        CowSplit::new(cflow![CowFlowItem::Token(Token)], block![]),
+                        CowSplit::new(cflow![CowFlowItem::Token(token_a.clone())], block![]),
                         CowSplit::new(cflow![], allow![5]),
-                    ]), CowFlowItem::Token(Token)], allow![0, 1, 2]),
+                    ]), CowFlowItem::Token(token_a.clone())], allow![0, 1, 2]),
                 ],
                 btreeset![
-                    CowSplit::new(cflow![CowFlowItem::Token(Token)], allow![7]),
+                    CowSplit::new(cflow![CowFlowItem::Token(token_a.clone())], allow![7]),
                     CowSplit::new(cflow![CowFlowItem::Split(csplitset![
-                        CowSplit::new(cflow![CowFlowItem::Token(Token)], block![]),
+                        CowSplit::new(cflow![CowFlowItem::Token(token_a.clone())], block![]),
                         CowSplit::new(cflow![], allow![5]),
-                    ]), CowFlowItem::Token(Token)], allow![0, 1, 2]),
+                    ]), CowFlowItem::Token(token_a.clone())], allow![0, 1, 2]),
                     CowSplit::new(cflow![], block![0, 1, 2, 7]),
                 ],
             ),
             // NOTE: This case tests recursive normalization.
             // (
             //     vec![
-            //         CowSplit::new(cflow![CowFlowItem::Token(Token)], allow![7]),
+            //         CowSplit::new(cflow![CowFlowItem::Token(token_a.clone())], allow![7]),
             //         CowSplit::new(cflow![CowFlowItem::Split(csplitset![
-            //             CowSplit::new(cflow![CowFlowItem::Token(Token)], block![0, 1, 2]),
-            //             CowSplit::new(cflow![CowFlowItem::Token(Token), CowFlowItem::Token(Token)], allow![5]),
-            //         ]), CowFlowItem::Token(Token)], allow![0, 1, 2]),
+            //             CowSplit::new(cflow![CowFlowItem::Token(token_a.clone())], block![0, 1, 2]),
+            //             CowSplit::new(cflow![CowFlowItem::Token(token_a.clone()), CowFlowItem::Token(token_a.clone())], allow![5]),
+            //         ]), CowFlowItem::Token(token_a.clone())], allow![0, 1, 2]),
             //     ],
             //     btreeset![
-            //         CowSplit::new(cflow![CowFlowItem::Token(Token)], allow![7]),
+            //         CowSplit::new(cflow![CowFlowItem::Token(token_a.clone())], allow![7]),
             //         CowSplit::new(cflow![CowFlowItem::Split(csplitset![
-            //             CowSplit::new(cflow![CowFlowItem::Token(Token)], block![0, 1, 2]),
-            //             CowSplit::new(cflow![CowFlowItem::Token(Token), CowFlowItem::Token(Token)], allow![5]),
+            //             CowSplit::new(cflow![CowFlowItem::Token(token_a.clone())], block![0, 1, 2]),
+            //             CowSplit::new(cflow![CowFlowItem::Token(token_a.clone()), CowFlowItem::Token(token_a.clone())], allow![5]),
             //             CowSplit::new(cflow![], allow![0, 1, 2]),
-            //         ]), CowFlowItem::Token(Token)], allow![0, 1, 2]),
+            //         ]), CowFlowItem::Token(token_a.clone())], allow![0, 1, 2]),
             //         CowSplit::new(cflow![], block![0, 1, 2, 7]),
             //     ],
             // ),

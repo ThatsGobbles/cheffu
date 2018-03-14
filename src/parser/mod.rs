@@ -4,7 +4,7 @@ use std::num::ParseIntError;
 mod parser_funcs {
     use nom;
 
-    use token::TToken;
+    use token::Token;
 
     const INGREDIENT_SIGIL: char = '*';
     const MODIFIER_SIGIL: char = ',';
@@ -64,43 +64,43 @@ mod parser_funcs {
         ws!(recognize!(separated_nonempty_list_complete!(nom::space, nom::alphanumeric)))
     );
 
-    named!(pub ingredient_token<&str, TToken>,
+    named!(pub ingredient_token<&str, Token>,
         ws!(do_parse!(
             char!(INGREDIENT_SIGIL) >>
             value: phrase >>
-            (TToken::Ingredient(value.to_string()))
+            (Token::Ingredient(value.to_string()))
         ))
     );
 
-    named!(pub action_token<&str, TToken>,
+    named!(pub action_token<&str, Token>,
         ws!(do_parse!(
             char!(ACTION_SIGIL) >>
             value: phrase >>
-            (TToken::Action(value.to_string()))
+            (Token::Action(value.to_string()))
         ))
     );
 
-    named!(pub combination_token<&str, TToken>,
+    named!(pub combination_token<&str, Token>,
         ws!(do_parse!(
             char!(COMBINATION_SIGIL) >>
             value: phrase >>
-            (TToken::Combination(value.to_string()))
+            (Token::Combination(value.to_string()))
         ))
     );
 
-    named!(pub modifier_token<&str, TToken>,
+    named!(pub modifier_token<&str, Token>,
         ws!(do_parse!(
             char!(MODIFIER_SIGIL) >>
             value: phrase >>
-            (TToken::Modifier(value.to_string()))
+            (Token::Modifier(value.to_string()))
         ))
     );
 
-    named!(pub annotation_token<&str, TToken>,
+    named!(pub annotation_token<&str, Token>,
         ws!(do_parse!(
             char!(ANNOTATION_SIGIL) >>
             value: phrase >>
-            (TToken::Annotation(value.to_string()))
+            (Token::Annotation(value.to_string()))
         ))
     );
 }
@@ -111,7 +111,7 @@ mod tests {
 
     use nom::{IResult, ErrorKind};
 
-    use token::TToken;
+    use token::Token;
 
     #[test]
     fn test_integer_repr() {
@@ -257,17 +257,17 @@ mod tests {
     #[test]
     fn test_ingredient_token() {
         let inputs_and_expected = vec![
-            ("* apple", IResult::Done("", TToken::Ingredient("apple".to_string()))),
-            ("* apple      fritters", IResult::Done("", TToken::Ingredient("apple      fritters".to_string()))),
-            ("*apple", IResult::Done("", TToken::Ingredient("apple".to_string()))),
-            (" *apple", IResult::Done("", TToken::Ingredient("apple".to_string()))),
-            ("* apple, Granny Smith", IResult::Done(", Granny Smith", TToken::Ingredient("apple".to_string()))),
+            ("* apple", IResult::Done("", Token::Ingredient("apple".to_string()))),
+            ("* apple      fritters", IResult::Done("", Token::Ingredient("apple      fritters".to_string()))),
+            ("*apple", IResult::Done("", Token::Ingredient("apple".to_string()))),
+            (" *apple", IResult::Done("", Token::Ingredient("apple".to_string()))),
+            ("* apple, Granny Smith", IResult::Done(", Granny Smith", Token::Ingredient("apple".to_string()))),
             ("apple", IResult::Error(ErrorKind::Char)),
             ("* !!!!", IResult::Error(ErrorKind::AlphaNumeric)),
-            ("* apple!!!!", IResult::Done("!!!!", TToken::Ingredient("apple".to_string()))),
-            ("* apple !!!!", IResult::Done("!!!!", TToken::Ingredient("apple".to_string()))),
-            ("* APPLE !!!!", IResult::Done("!!!!", TToken::Ingredient("APPLE".to_string()))),
-            ("* APPLE   007 !!!!", IResult::Done("!!!!", TToken::Ingredient("APPLE   007".to_string()))),
+            ("* apple!!!!", IResult::Done("!!!!", Token::Ingredient("apple".to_string()))),
+            ("* apple !!!!", IResult::Done("!!!!", Token::Ingredient("apple".to_string()))),
+            ("* APPLE !!!!", IResult::Done("!!!!", Token::Ingredient("APPLE".to_string()))),
+            ("* APPLE   007 !!!!", IResult::Done("!!!!", Token::Ingredient("APPLE   007".to_string()))),
         ];
 
         for (input, expected) in inputs_and_expected {
@@ -279,17 +279,17 @@ mod tests {
     #[test]
     fn test_action_token() {
         let inputs_and_expected = vec![
-            ("= saute", IResult::Done("", TToken::Action("saute".to_string()))),
-            ("= saute      in", IResult::Done("", TToken::Action("saute      in".to_string()))),
-            ("=saute", IResult::Done("", TToken::Action("saute".to_string()))),
-            (" =saute", IResult::Done("", TToken::Action("saute".to_string()))),
-            ("= saute, over high heat", IResult::Done(", over high heat", TToken::Action("saute".to_string()))),
+            ("= saute", IResult::Done("", Token::Action("saute".to_string()))),
+            ("= saute      in", IResult::Done("", Token::Action("saute      in".to_string()))),
+            ("=saute", IResult::Done("", Token::Action("saute".to_string()))),
+            (" =saute", IResult::Done("", Token::Action("saute".to_string()))),
+            ("= saute, over high heat", IResult::Done(", over high heat", Token::Action("saute".to_string()))),
             ("saute", IResult::Error(ErrorKind::Char)),
             ("= !!!!", IResult::Error(ErrorKind::AlphaNumeric)),
-            ("= saute!!!!", IResult::Done("!!!!", TToken::Action("saute".to_string()))),
-            ("= saute !!!!", IResult::Done("!!!!", TToken::Action("saute".to_string()))),
-            ("= SAUTE !!!!", IResult::Done("!!!!", TToken::Action("SAUTE".to_string()))),
-            ("= SAUTE   007 !!!!", IResult::Done("!!!!", TToken::Action("SAUTE   007".to_string()))),
+            ("= saute!!!!", IResult::Done("!!!!", Token::Action("saute".to_string()))),
+            ("= saute !!!!", IResult::Done("!!!!", Token::Action("saute".to_string()))),
+            ("= SAUTE !!!!", IResult::Done("!!!!", Token::Action("SAUTE".to_string()))),
+            ("= SAUTE   007 !!!!", IResult::Done("!!!!", Token::Action("SAUTE   007".to_string()))),
         ];
 
         for (input, expected) in inputs_and_expected {
@@ -301,17 +301,17 @@ mod tests {
     #[test]
     fn test_combination_token() {
         let inputs_and_expected = vec![
-            ("/ mix", IResult::Done("", TToken::Combination("mix".to_string()))),
-            ("/ mix      together", IResult::Done("", TToken::Combination("mix      together".to_string()))),
-            ("/mix", IResult::Done("", TToken::Combination("mix".to_string()))),
-            (" /mix", IResult::Done("", TToken::Combination("mix".to_string()))),
-            ("/ mix, over high heat", IResult::Done(", over high heat", TToken::Combination("mix".to_string()))),
+            ("/ mix", IResult::Done("", Token::Combination("mix".to_string()))),
+            ("/ mix      together", IResult::Done("", Token::Combination("mix      together".to_string()))),
+            ("/mix", IResult::Done("", Token::Combination("mix".to_string()))),
+            (" /mix", IResult::Done("", Token::Combination("mix".to_string()))),
+            ("/ mix, over high heat", IResult::Done(", over high heat", Token::Combination("mix".to_string()))),
             ("mix", IResult::Error(ErrorKind::Char)),
             ("/ !!!!", IResult::Error(ErrorKind::AlphaNumeric)),
-            ("/ mix!!!!", IResult::Done("!!!!", TToken::Combination("mix".to_string()))),
-            ("/ mix !!!!", IResult::Done("!!!!", TToken::Combination("mix".to_string()))),
-            ("/ MIX !!!!", IResult::Done("!!!!", TToken::Combination("MIX".to_string()))),
-            ("/ MIX   007 !!!!", IResult::Done("!!!!", TToken::Combination("MIX   007".to_string()))),
+            ("/ mix!!!!", IResult::Done("!!!!", Token::Combination("mix".to_string()))),
+            ("/ mix !!!!", IResult::Done("!!!!", Token::Combination("mix".to_string()))),
+            ("/ MIX !!!!", IResult::Done("!!!!", Token::Combination("MIX".to_string()))),
+            ("/ MIX   007 !!!!", IResult::Done("!!!!", Token::Combination("MIX   007".to_string()))),
         ];
 
         for (input, expected) in inputs_and_expected {
@@ -323,17 +323,17 @@ mod tests {
     #[test]
     fn test_modifier_token() {
         let inputs_and_expected = vec![
-            (", large", IResult::Done("", TToken::Modifier("large".to_string()))),
-            (", large      green", IResult::Done("", TToken::Modifier("large      green".to_string()))),
-            (",large", IResult::Done("", TToken::Modifier("large".to_string()))),
-            (" ,large", IResult::Done("", TToken::Modifier("large".to_string()))),
-            (", large, over high heat", IResult::Done(", over high heat", TToken::Modifier("large".to_string()))),
+            (", large", IResult::Done("", Token::Modifier("large".to_string()))),
+            (", large      green", IResult::Done("", Token::Modifier("large      green".to_string()))),
+            (",large", IResult::Done("", Token::Modifier("large".to_string()))),
+            (" ,large", IResult::Done("", Token::Modifier("large".to_string()))),
+            (", large, over high heat", IResult::Done(", over high heat", Token::Modifier("large".to_string()))),
             ("large", IResult::Error(ErrorKind::Char)),
             (", !!!!", IResult::Error(ErrorKind::AlphaNumeric)),
-            (", large!!!!", IResult::Done("!!!!", TToken::Modifier("large".to_string()))),
-            (", large !!!!", IResult::Done("!!!!", TToken::Modifier("large".to_string()))),
-            (", LARGE !!!!", IResult::Done("!!!!", TToken::Modifier("LARGE".to_string()))),
-            (", LARGE   007 !!!!", IResult::Done("!!!!", TToken::Modifier("LARGE   007".to_string()))),
+            (", large!!!!", IResult::Done("!!!!", Token::Modifier("large".to_string()))),
+            (", large !!!!", IResult::Done("!!!!", Token::Modifier("large".to_string()))),
+            (", LARGE !!!!", IResult::Done("!!!!", Token::Modifier("LARGE".to_string()))),
+            (", LARGE   007 !!!!", IResult::Done("!!!!", Token::Modifier("LARGE   007".to_string()))),
         ];
 
         for (input, expected) in inputs_and_expected {
@@ -345,17 +345,17 @@ mod tests {
     #[test]
     fn test_annotation_token() {
         let inputs_and_expected = vec![
-            ("; gently", IResult::Done("", TToken::Annotation("gently".to_string()))),
-            ("; gently      together", IResult::Done("", TToken::Annotation("gently      together".to_string()))),
-            (";gently", IResult::Done("", TToken::Annotation("gently".to_string()))),
-            (" ;gently", IResult::Done("", TToken::Annotation("gently".to_string()))),
-            ("; gently, over high heat", IResult::Done(", over high heat", TToken::Annotation("gently".to_string()))),
+            ("; gently", IResult::Done("", Token::Annotation("gently".to_string()))),
+            ("; gently      together", IResult::Done("", Token::Annotation("gently      together".to_string()))),
+            (";gently", IResult::Done("", Token::Annotation("gently".to_string()))),
+            (" ;gently", IResult::Done("", Token::Annotation("gently".to_string()))),
+            ("; gently, over high heat", IResult::Done(", over high heat", Token::Annotation("gently".to_string()))),
             ("gently", IResult::Error(ErrorKind::Char)),
             ("; !!!!", IResult::Error(ErrorKind::AlphaNumeric)),
-            ("; gently!!!!", IResult::Done("!!!!", TToken::Annotation("gently".to_string()))),
-            ("; gently !!!!", IResult::Done("!!!!", TToken::Annotation("gently".to_string()))),
-            ("; GENTLY !!!!", IResult::Done("!!!!", TToken::Annotation("GENTLY".to_string()))),
-            ("; GENTLY   007 !!!!", IResult::Done("!!!!", TToken::Annotation("GENTLY   007".to_string()))),
+            ("; gently!!!!", IResult::Done("!!!!", Token::Annotation("gently".to_string()))),
+            ("; gently !!!!", IResult::Done("!!!!", Token::Annotation("gently".to_string()))),
+            ("; GENTLY !!!!", IResult::Done("!!!!", Token::Annotation("GENTLY".to_string()))),
+            ("; GENTLY   007 !!!!", IResult::Done("!!!!", Token::Annotation("GENTLY   007".to_string()))),
         ];
 
         for (input, expected) in inputs_and_expected {
