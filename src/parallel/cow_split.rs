@@ -1,6 +1,9 @@
 use std::borrow::Cow;
 use std::collections::{BTreeSet, HashMap};
 
+use failure::Error;
+
+use token::Token;
 use super::gate::{Gate, Slot};
 use super::cow_flow::{CowFlow, SlotStackError};
 
@@ -18,17 +21,17 @@ impl<'a> CowSplit<'a> {
         CowSplit { flow: flow.into(), gate: gate.into() }
     }
 
-//     pub fn find_walks(&self, target_slot: Slot, slot_stack: &mut Vec<Slot>) -> Result<Vec<Vec<&Token>>, Error> {
-//         // Check if the slot is allowed by the active gate.
-//         if !self.gate.allows_slot(target_slot) {
-//             // bail!(SlotStackError::Mismatch{expected: self.gate.clone(), produced: target_slot})
-//             Ok(vec![])
-//         }
-//         else {
-//             // Find all walks on the contained flow.
-//             self.flow.find_walks(slot_stack)
-//         }
-//     }
+    pub fn find_walks(&self, target_slot: Slot, slot_stack: &mut Vec<Slot>) -> Result<Vec<Vec<&Token>>, Error> {
+        // Check if the slot is allowed by the active gate.
+        if !self.gate.allows_slot(target_slot) {
+            // NOTE: This is a single-element result.
+            Ok(vec![vec![]])
+        }
+        else {
+            // Find all walks on the contained flow.
+            self.flow.find_walks(slot_stack)
+        }
+    }
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
@@ -38,7 +41,7 @@ impl<'a> CowSplitSet<'a> {
     pub fn new<II>(splits: II) -> Self
     where II: IntoIterator<Item = CowSplit<'a>>
     {
-        CowSplitSet(btreeset![])
+        CowSplitSet(splits.into_iter().collect())
     }
 
     pub fn normalize_splits<'b, II>(splits: II) -> BTreeSet<CowSplit<'b>>
@@ -86,6 +89,17 @@ impl<'a> CowSplitSet<'a> {
         }
 
         flow_to_gate.into_iter().map(|(f, g)| CowSplit::new(f, g)).collect::<BTreeSet<CowSplit>>()
+    }
+
+    /// Produces all walks through the contained splits that allow a given slot.
+    pub fn find_walks(&self, target_slot: Slot, slot_stack: &mut Vec<Slot>) -> Result<Vec<Vec<&Token>>, Error> {
+        let mut results: Vec<Vec<&Token>> = vec![];
+        for split in &self.0 {
+            let mut split_result = split.find_walks(target_slot, &mut slot_stack.clone())?;
+            results.append(&mut split_result);
+        }
+
+        Ok(results)
     }
 }
 
@@ -161,24 +175,25 @@ mod tests {
                     CowSplit::new(cflow![], block![0, 1, 2, 7]),
                 ],
             ),
-            (
-                vec![
-                    CowSplit::new(cflow![CowFlowItem::Token(Token)], allow![7]),
-                    CowSplit::new(cflow![CowFlowItem::Split(csplitset![
-                        CowSplit::new(cflow![CowFlowItem::Token(Token)], block![0, 1, 2]),
-                        CowSplit::new(cflow![CowFlowItem::Token(Token), CowFlowItem::Token(Token)], allow![5]),
-                    ]), CowFlowItem::Token(Token)], allow![0, 1, 2]),
-                ],
-                btreeset![
-                    CowSplit::new(cflow![CowFlowItem::Token(Token)], allow![7]),
-                    CowSplit::new(cflow![CowFlowItem::Split(csplitset![
-                        CowSplit::new(cflow![CowFlowItem::Token(Token)], block![0, 1, 2]),
-                        CowSplit::new(cflow![CowFlowItem::Token(Token), CowFlowItem::Token(Token)], allow![5]),
-                        CowSplit::new(cflow![], allow![0, 1, 2]),
-                    ]), CowFlowItem::Token(Token)], allow![0, 1, 2]),
-                    CowSplit::new(cflow![], block![0, 1, 2, 7]),
-                ],
-            ),
+            // NOTE: This case tests recursive normalization.
+            // (
+            //     vec![
+            //         CowSplit::new(cflow![CowFlowItem::Token(Token)], allow![7]),
+            //         CowSplit::new(cflow![CowFlowItem::Split(csplitset![
+            //             CowSplit::new(cflow![CowFlowItem::Token(Token)], block![0, 1, 2]),
+            //             CowSplit::new(cflow![CowFlowItem::Token(Token), CowFlowItem::Token(Token)], allow![5]),
+            //         ]), CowFlowItem::Token(Token)], allow![0, 1, 2]),
+            //     ],
+            //     btreeset![
+            //         CowSplit::new(cflow![CowFlowItem::Token(Token)], allow![7]),
+            //         CowSplit::new(cflow![CowFlowItem::Split(csplitset![
+            //             CowSplit::new(cflow![CowFlowItem::Token(Token)], block![0, 1, 2]),
+            //             CowSplit::new(cflow![CowFlowItem::Token(Token), CowFlowItem::Token(Token)], allow![5]),
+            //             CowSplit::new(cflow![], allow![0, 1, 2]),
+            //         ]), CowFlowItem::Token(Token)], allow![0, 1, 2]),
+            //         CowSplit::new(cflow![], block![0, 1, 2, 7]),
+            //     ],
+            // ),
         ];
 
         for (input, expected) in inputs_and_expected {
