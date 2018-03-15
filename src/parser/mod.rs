@@ -1,6 +1,3 @@
-use std::str::FromStr;
-use std::num::ParseIntError;
-
 mod parser_funcs {
     use nom;
 
