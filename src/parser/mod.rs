@@ -1,6 +1,7 @@
 use nom;
 
 use token::Token;
+use parallel::flow::{FlowItem, SplitSet};
 
 const INGREDIENT_SIGIL: char = '*';
 const MODIFIER_SIGIL: char = ',';
@@ -8,9 +9,17 @@ const ANNOTATION_SIGIL: char = ';';
 const ACTION_SIGIL: char = '=';
 const COMBINATION_SIGIL: char = '/';
 
+const VAR_SPLIT_START_SIGIL: char = '[';
+const VAR_SPLIT_CLOSE_SIGIL: char = ']';
+const VAR_SPLIT_SEP_SIGIL: char = '|';
+const VAR_SPLIT_TAG_SIGIL: char = '#';
+
 pub struct Parsers;
 
 impl Parsers {
+
+    /** Primitive types **/
+
     named!(pub integer_repr<&str, &str>,
         recognize!(nom::digit)
     );
@@ -59,9 +68,11 @@ impl Parsers {
     );
 
     named!(pub phrase<&str, &str>,
-        // A sequence of whitespace separated alphanumerics.
+        // A sequence of whitespace-separated alphanumerics.
         ws!(recognize!(separated_nonempty_list_complete!(nom::space, nom::alphanumeric)))
     );
+
+    /** Tokens **/
 
     named!(pub ingredient_token<&str, Token>,
         ws!(do_parse!(
@@ -101,6 +112,45 @@ impl Parsers {
             value: call!(Self::phrase) >>
             (Token::Annotation(value.to_string()))
         ))
+    );
+
+    /** Token sequences **/
+
+    named!(pub token<&str, Token>,
+        alt!(
+            call!(Self::ingredient_token)
+            | call!(Self::action_token)
+            | call!(Self::combination_token)
+            | call!(Self::modifier_token)
+            | call!(Self::annotation_token)
+        )
+    );
+
+    named!(pub flow_item<&str, FlowItem>,
+        alt!(
+            do_parse!(
+                token_val: call!(Self::token) >>
+                (FlowItem::Token(token_val))
+            )
+            | do_parse!(
+                // TODO: This needs obvious fixing.
+                split_val: call!(Self::variant_split) >>
+                (FlowItem::Split(SplitSet::new(btreeset![])))
+            )
+        )
+    );
+
+    /** Variants **/
+
+    named!(pub variant_split<&str, Vec<Token>>,
+        // A bracketed sequence of pipe-separated variants.
+        ws!(delimited!(
+            char!(VAR_SPLIT_START_SIGIL),
+            // call!(Self::phrase),
+            separated_nonempty_list_complete!(char!(VAR_SPLIT_SEP_SIGIL), call!(Self::ingredient_token)),
+            char!(VAR_SPLIT_CLOSE_SIGIL)
+        ))
+        // ws!(recognize!(separated_nonempty_list_complete!(nom::space, nom::alphanumeric)))
     );
 }
 
@@ -249,6 +299,19 @@ mod tests {
 
         for (input, expected) in inputs_and_expected {
             let produced = Parsers::phrase(input);
+            assert_eq!(expected, produced);
+        }
+    }
+
+    #[test]
+    fn test_variant_split() {
+        let inputs_and_expected = vec![
+            ("[* phrase]", IResult::Done("", vec![Token::Ingredient("phrase".to_string())])),
+            ("[ * phrase ]", IResult::Done("", vec![Token::Ingredient("phrase".to_string())])),
+        ];
+
+        for (input, expected) in inputs_and_expected {
+            let produced = Parsers::variant_split(input);
             assert_eq!(expected, produced);
         }
     }
