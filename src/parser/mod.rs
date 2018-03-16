@@ -1,58 +1,60 @@
-mod parser_funcs {
-    use nom;
+use nom;
 
-    use token::Token;
+use token::Token;
 
-    const INGREDIENT_SIGIL: char = '*';
-    const MODIFIER_SIGIL: char = ',';
-    const ANNOTATION_SIGIL: char = ';';
-    const ACTION_SIGIL: char = '=';
-    const COMBINATION_SIGIL: char = '/';
+const INGREDIENT_SIGIL: char = '*';
+const MODIFIER_SIGIL: char = ',';
+const ANNOTATION_SIGIL: char = ';';
+const ACTION_SIGIL: char = '=';
+const COMBINATION_SIGIL: char = '/';
 
+pub struct Parsers;
+
+impl Parsers {
     named!(pub integer_repr<&str, &str>,
         recognize!(nom::digit)
     );
 
     named!(pub nz_integer_repr<&str, &str>,
-        verify!(integer_repr, |ds: &str| !ds.chars().all(|c| c == '0'))
+        verify!(Self::integer_repr, |ds: &str| !ds.chars().all(|c| c == '0'))
     );
 
     named!(pub decimal_repr<&str, &str>,
         recognize!(complete!(tuple!(
-            integer_repr,
+            call!(Self::integer_repr),
             tag!("."),
-            integer_repr
+            call!(Self::integer_repr)
         )))
     );
 
     named!(pub nz_decimal_repr<&str, &str>,
         recognize!(alt!(
             complete!(tuple!(
-                nz_integer_repr,
+                call!(Self::nz_integer_repr),
                 tag!("."),
-                integer_repr
+                call!(Self::integer_repr)
             ))
             | complete!(tuple!(
-                integer_repr,
+                call!(Self::integer_repr),
                 tag!("."),
-                nz_integer_repr
+                call!(Self::nz_integer_repr)
             ))
         ))
     );
 
     named!(pub rational_repr<&str, &str>,
         recognize!(complete!(tuple!(
-            integer_repr,
+            call!(Self::integer_repr),
             tag!("/"),
-            nz_integer_repr
+            call!(Self::nz_integer_repr)
         )))
     );
 
     named!(pub nz_rational_repr<&str, &str>,
         recognize!(complete!(tuple!(
-            nz_integer_repr,
+            call!(Self::nz_integer_repr),
             tag!("/"),
-            nz_integer_repr
+            call!(Self::nz_integer_repr)
         )))
     );
 
@@ -64,7 +66,7 @@ mod parser_funcs {
     named!(pub ingredient_token<&str, Token>,
         ws!(do_parse!(
             char!(INGREDIENT_SIGIL) >>
-            value: phrase >>
+            value: call!(Self::phrase) >>
             (Token::Ingredient(value.to_string()))
         ))
     );
@@ -72,7 +74,7 @@ mod parser_funcs {
     named!(pub action_token<&str, Token>,
         ws!(do_parse!(
             char!(ACTION_SIGIL) >>
-            value: phrase >>
+            value: call!(Self::phrase) >>
             (Token::Action(value.to_string()))
         ))
     );
@@ -80,7 +82,7 @@ mod parser_funcs {
     named!(pub combination_token<&str, Token>,
         ws!(do_parse!(
             char!(COMBINATION_SIGIL) >>
-            value: phrase >>
+            value: call!(Self::phrase) >>
             (Token::Combination(value.to_string()))
         ))
     );
@@ -88,7 +90,7 @@ mod parser_funcs {
     named!(pub modifier_token<&str, Token>,
         ws!(do_parse!(
             char!(MODIFIER_SIGIL) >>
-            value: phrase >>
+            value: call!(Self::phrase) >>
             (Token::Modifier(value.to_string()))
         ))
     );
@@ -96,7 +98,7 @@ mod parser_funcs {
     named!(pub annotation_token<&str, Token>,
         ws!(do_parse!(
             char!(ANNOTATION_SIGIL) >>
-            value: phrase >>
+            value: call!(Self::phrase) >>
             (Token::Annotation(value.to_string()))
         ))
     );
@@ -104,7 +106,7 @@ mod parser_funcs {
 
 #[cfg(test)]
 mod tests {
-    use super::parser_funcs;
+    use super::Parsers;
 
     use nom::{IResult, ErrorKind};
 
@@ -125,7 +127,7 @@ mod tests {
         ];
 
         for (input, expected) in inputs_and_expected {
-            let produced = parser_funcs::integer_repr(input);
+            let produced = Parsers::integer_repr(input);
             assert_eq!(expected, produced);
         }
     }
@@ -145,7 +147,7 @@ mod tests {
         ];
 
         for (input, expected) in inputs_and_expected {
-            let produced = parser_funcs::nz_integer_repr(input);
+            let produced = Parsers::nz_integer_repr(input);
             assert_eq!(expected, produced);
         }
     }
@@ -166,7 +168,7 @@ mod tests {
         ];
 
         for (input, expected) in inputs_and_expected {
-            let produced = parser_funcs::decimal_repr(input);
+            let produced = Parsers::decimal_repr(input);
             assert_eq!(expected, produced);
         }
     }
@@ -187,7 +189,7 @@ mod tests {
         ];
 
         for (input, expected) in inputs_and_expected {
-            let produced = parser_funcs::nz_decimal_repr(input);
+            let produced = Parsers::nz_decimal_repr(input);
             assert_eq!(expected, produced);
         }
     }
@@ -207,7 +209,7 @@ mod tests {
         ];
 
         for (input, expected) in inputs_and_expected {
-            let produced = parser_funcs::rational_repr(input);
+            let produced = Parsers::rational_repr(input);
             assert_eq!(expected, produced);
         }
     }
@@ -227,7 +229,7 @@ mod tests {
         ];
 
         for (input, expected) in inputs_and_expected {
-            let produced = parser_funcs::nz_rational_repr(input);
+            let produced = Parsers::nz_rational_repr(input);
             assert_eq!(expected, produced);
         }
     }
@@ -246,7 +248,7 @@ mod tests {
         ];
 
         for (input, expected) in inputs_and_expected {
-            let produced = parser_funcs::phrase(input);
+            let produced = Parsers::phrase(input);
             assert_eq!(expected, produced);
         }
     }
@@ -268,7 +270,7 @@ mod tests {
         ];
 
         for (input, expected) in inputs_and_expected {
-            let produced = parser_funcs::ingredient_token(input);
+            let produced = Parsers::ingredient_token(input);
             assert_eq!(expected, produced);
         }
     }
@@ -290,7 +292,7 @@ mod tests {
         ];
 
         for (input, expected) in inputs_and_expected {
-            let produced = parser_funcs::action_token(input);
+            let produced = Parsers::action_token(input);
             assert_eq!(expected, produced);
         }
     }
@@ -312,7 +314,7 @@ mod tests {
         ];
 
         for (input, expected) in inputs_and_expected {
-            let produced = parser_funcs::combination_token(input);
+            let produced = Parsers::combination_token(input);
             assert_eq!(expected, produced);
         }
     }
@@ -334,7 +336,7 @@ mod tests {
         ];
 
         for (input, expected) in inputs_and_expected {
-            let produced = parser_funcs::modifier_token(input);
+            let produced = Parsers::modifier_token(input);
             assert_eq!(expected, produced);
         }
     }
@@ -356,7 +358,7 @@ mod tests {
         ];
 
         for (input, expected) in inputs_and_expected {
-            let produced = parser_funcs::annotation_token(input);
+            let produced = Parsers::annotation_token(input);
             assert_eq!(expected, produced);
         }
     }

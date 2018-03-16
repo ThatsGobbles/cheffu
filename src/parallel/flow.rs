@@ -243,6 +243,9 @@ impl<'a> SplitSet<'a> {
             let flow = split.flow;
             let gate = split.gate;
 
+            // TODO: If doing recursion, logic should live here.
+            // Would need to have a method on Flow, which returns a new Flow with normalized Split enums.
+
             // Store in mapping.
             flow_to_gate
                 .entry(flow)
