@@ -1,7 +1,7 @@
 use nom;
 
 use token::Token;
-use parallel::flow::{FlowItem, SplitSet};
+use parallel::flow::{Flow, FlowItem, Split, SplitSet};
 
 const INGREDIENT_SIGIL: char = '*';
 const MODIFIER_SIGIL: char = ',';
@@ -126,6 +126,8 @@ impl Parsers {
         )
     );
 
+    /** Variants **/
+
     named!(pub flow_item<&str, FlowItem>,
         alt!(
             do_parse!(
@@ -134,15 +136,20 @@ impl Parsers {
             )
             | do_parse!(
                 // TODO: This needs obvious fixing.
-                split_val: call!(Self::variant_split) >>
+                split_val: call!(Self::split_set) >>
                 (FlowItem::Split(SplitSet::new(btreeset![])))
             )
         )
     );
 
-    /** Variants **/
+    named!(pub flow<&str, Flow>,
+        do_parse!(
+            flow_items: many0!(call!(Self::flow_item)) >>
+            (Flow::new(flow_items))
+        )
+    );
 
-    named!(pub variant_split<&str, Vec<Token>>,
+    named!(pub split_set<&str, Vec<Token>>,
         // A bracketed sequence of pipe-separated variants.
         ws!(delimited!(
             char!(VAR_SPLIT_START_SIGIL),
@@ -299,19 +306,6 @@ mod tests {
 
         for (input, expected) in inputs_and_expected {
             let produced = Parsers::phrase(input);
-            assert_eq!(expected, produced);
-        }
-    }
-
-    #[test]
-    fn test_variant_split() {
-        let inputs_and_expected = vec![
-            ("[* phrase]", IResult::Done("", vec![Token::Ingredient("phrase".to_string())])),
-            ("[ * phrase ]", IResult::Done("", vec![Token::Ingredient("phrase".to_string())])),
-        ];
-
-        for (input, expected) in inputs_and_expected {
-            let produced = Parsers::variant_split(input);
             assert_eq!(expected, produced);
         }
     }

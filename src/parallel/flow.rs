@@ -151,14 +151,11 @@ impl<'a> Split<'a> {
 
     fn find_walks(&self, target_slot: Slot, slot_stack: &mut Vec<Slot>) -> Result<Vec<Vec<&Token>>, Error> {
         // Check if the slot is allowed by the active gate.
-        if !self.gate.allows_slot(target_slot) {
-            // NOTE: This is a single-element result.
-            // TODO: This should never happen with proper normalization, might be better to error.
-            Ok(vec![vec![]])
-        }
-        else {
-            // Find all walks on the contained flow.
-            self.flow.find_walks(slot_stack)
+        match self.gate.allows_slot(target_slot) {
+            // Look though walks in this subflow.
+            true => self.flow.find_walks(slot_stack),
+            // Return an empty vector, implying zero valid valks though this split with this gate.
+            false => Ok(vec![]),
         }
     }
 }
@@ -172,7 +169,7 @@ impl<'a> SplitSet<'a> {
     pub fn new<II>(splits: II) -> Self
     where II: IntoIterator<Item = Split<'a>>
     {
-        SplitSet(splits.into_iter().collect())
+        SplitSet(SplitSet::normalize_splits(splits))
     }
 
     // pub fn normalize_splits<'b, II>(splits: II) -> BTreeSet<Split<'b>>
