@@ -1,7 +1,12 @@
+use std::str::FromStr;
+use std::num::ParseIntError;
+
 use nom;
+use failure::Error;
 
 use token::Token;
 use parallel::flow::{Flow, FlowItem, Split, SplitSet};
+use parallel::gate::{Gate, Slot};
 
 const INGREDIENT_SIGIL: char = '*';
 const MODIFIER_SIGIL: char = ',';
@@ -13,6 +18,8 @@ const VAR_SPLIT_START_SIGIL: char = '[';
 const VAR_SPLIT_CLOSE_SIGIL: char = ']';
 const VAR_SPLIT_SEP_SIGIL: char = '|';
 const VAR_SPLIT_TAG_SIGIL: char = '#';
+const VAR_SPLIT_SLOT_SEP_SIGIL: char = ',';
+const VAR_SPLIT_INV_SLOT_FLAG_SIGIL: char = '!';
 
 pub struct Parsers;
 
@@ -126,7 +133,25 @@ impl Parsers {
         )
     );
 
-    /** Variants **/
+    /** Gates **/
+
+    named!(pub slot<&str, Slot>,
+        map_res!(nom::digit, Slot::from_str)
+    );
+
+    named!(pub gate<&str, Gate>,
+        do_parse!(
+            char!(VAR_SPLIT_TAG_SIGIL) >>
+            inv_flag: map!(opt!(char!(VAR_SPLIT_INV_SLOT_FLAG_SIGIL)), |o| o.is_some()) >>
+            slots: separated_nonempty_list_complete!(char!(VAR_SPLIT_SLOT_SEP_SIGIL), call!(Self::slot)) >>
+            (match inv_flag {
+                true => Gate::new_block(slots),
+                false => Gate::new_allow(slots),
+            })
+        )
+    );
+
+    /** Flows **/
 
     named!(pub flow_item<&str, FlowItem>,
         alt!(
@@ -146,6 +171,15 @@ impl Parsers {
         do_parse!(
             flow_items: many0!(call!(Self::flow_item)) >>
             (Flow::new(flow_items))
+        )
+    );
+
+    named!(pub split<&str, Split>,
+        do_parse!(
+            flow: call!(Self::flow) >>
+            // TODO: Create parser for gate.
+            // gate: opt!(call!()) >>
+            (Split::new(flow, allow![]))
         )
     );
 
