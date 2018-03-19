@@ -177,18 +177,20 @@ impl Parsers {
     named!(pub split<&str, Split>,
         do_parse!(
             flow: call!(Self::flow) >>
-            // TODO: Create parser for gate.
-            // gate: opt!(call!()) >>
-            (Split::new(flow, allow![]))
+            gate: map!(opt!(call!(Self::gate)), |g| g.unwrap_or(block!())) >>
+            (Split::new(flow, gate))
         )
     );
 
-    named!(pub split_set<&str, Vec<Token>>,
+    named!(pub split_set<&str, SplitSet>,
         // A bracketed sequence of pipe-separated variants.
         ws!(delimited!(
             char!(VAR_SPLIT_START_SIGIL),
             // call!(Self::phrase),
-            separated_nonempty_list_complete!(char!(VAR_SPLIT_SEP_SIGIL), call!(Self::ingredient_token)),
+            do_parse!(
+                splits: separated_nonempty_list_complete!(char!(VAR_SPLIT_SEP_SIGIL), call!(Self::split)) >>
+                (SplitSet::new(splits))
+            ),
             char!(VAR_SPLIT_CLOSE_SIGIL)
         ))
         // ws!(recognize!(separated_nonempty_list_complete!(nom::space, nom::alphanumeric)))
