@@ -121,8 +121,6 @@ impl Parsers {
         ))
     );
 
-    /** Token sequences **/
-
     named!(pub token<&str, Token>,
         alt!(
             call!(Self::ingredient_token)
@@ -136,7 +134,7 @@ impl Parsers {
     /** Gates **/
 
     named!(pub slot<&str, Slot>,
-        map_res!(nom::digit, Slot::from_str)
+        ws!(map_res!(nom::digit, Slot::from_str))
     );
 
     named!(pub gate<&str, Gate>,
@@ -452,6 +450,40 @@ mod tests {
 
         for (input, expected) in inputs_and_expected {
             let produced = Parsers::annotation_token(input);
+            assert_eq!(expected, produced);
+        }
+    }
+
+    #[test]
+    fn test_token() {
+        let inputs_and_expected = vec![
+            ("* apple", IResult::Done("", Token::Ingredient("apple".to_string()))),
+            ("= saute", IResult::Done("", Token::Action("saute".to_string()))),
+            ("/ mix", IResult::Done("", Token::Combination("mix".to_string()))),
+            (", red", IResult::Done("", Token::Modifier("red".to_string()))),
+            ("; gently", IResult::Done("", Token::Annotation("gently".to_string()))),
+        ];
+
+        for (input, expected) in inputs_and_expected {
+            let produced = Parsers::token(input);
+            assert_eq!(expected, produced);
+        }
+    }
+
+    #[test]
+    fn test_slot() {
+        let inputs_and_expected = vec![
+            ("0", IResult::Done("", 0)),
+            ("1", IResult::Done("", 1)),
+            (" 1 ", IResult::Done("", 1)),
+            ("255", IResult::Done("", 255)),
+            ("256", IResult::Error(ErrorKind::MapRes)),
+            ("slot", IResult::Error(ErrorKind::Digit)),
+            ("-1", IResult::Error(ErrorKind::Digit)),
+        ];
+
+        for (input, expected) in inputs_and_expected {
+            let produced = Parsers::slot(input);
             assert_eq!(expected, produced);
         }
     }
