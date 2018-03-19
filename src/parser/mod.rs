@@ -145,8 +145,8 @@ impl Parsers {
             inv_flag: map!(opt!(char!(VAR_SPLIT_INV_SLOT_FLAG_SIGIL)), |o| o.is_some()) >>
             slots: separated_nonempty_list_complete!(char!(VAR_SPLIT_SLOT_SEP_SIGIL), call!(Self::slot)) >>
             (match inv_flag {
-                true => Gate::new_block(slots),
-                false => Gate::new_allow(slots),
+                true => Gate::block(slots),
+                false => Gate::allow(slots),
             })
         )
     );
