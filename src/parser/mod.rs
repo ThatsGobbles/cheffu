@@ -1,8 +1,6 @@
 use std::str::FromStr;
-use std::num::ParseIntError;
 
 use nom;
-use failure::Error;
 
 use token::Token;
 use parallel::flow::{Flow, FlowItem, Split, SplitSet};
@@ -13,6 +11,18 @@ const MODIFIER_SIGIL: char = ',';
 const ANNOTATION_SIGIL: char = ';';
 const ACTION_SIGIL: char = '=';
 const COMBINATION_SIGIL: char = '/';
+
+const CONCRETE_TOKEN_SIGIL: char = '*';
+const OPERATOR_TOKEN_SIGIL: char = '+';
+const METADATA_TOKEN_SIGIL: char = '&';
+
+const SPLIT_SET_START: char = '[';
+const SPLIT_SET_CLOSE: char = ']';
+const SPLIT_SET_SEPARATOR: char = '|';
+const GATE_START: char = '<';
+const GATE_CLOSE: char = '>';
+const GATE_INVERT_FLAG: char = '!';
+const EMPTY_FLOW_FLAG: char = '~';
 
 const VAR_SPLIT_START_SIGIL: char = '[';
 const VAR_SPLIT_CLOSE_SIGIL: char = ']';
@@ -79,6 +89,20 @@ impl Parsers {
         ws!(recognize!(separated_nonempty_list_complete!(nom::space, nom::alphanumeric)))
     );
 
+    named!(pub measurement<&str, &str>,
+        recognize!(
+            char!('X')
+        )
+    );
+
+    /// Represents a fractional amount between 0 and 1, noninclusive.
+    named!(pub f_partition<&str, (usize, usize)>,
+        tuple!(
+            map!(many1!(char!('+')), |c| c.len()),
+            map!(many1!(char!('-')), |c| c.len())
+        )
+    );
+
     /** Tokens **/
 
     named!(pub ingredient_token<&str, Token>,
@@ -138,7 +162,7 @@ impl Parsers {
     );
 
     named!(pub gate<&str, Gate>,
-        do_parse!(
+        ws!(complete!(do_parse!(
             char!(VAR_SPLIT_TAG_SIGIL) >>
             inv_flag: map!(opt!(char!(VAR_SPLIT_INV_SLOT_FLAG_SIGIL)), |o| o.is_some()) >>
             slots: separated_nonempty_list_complete!(char!(VAR_SPLIT_SLOT_SEP_SIGIL), call!(Self::slot)) >>
@@ -146,7 +170,7 @@ impl Parsers {
                 true => Gate::block(slots),
                 false => Gate::allow(slots),
             })
-        )
+        )))
     );
 
     /** Flows **/
@@ -158,9 +182,8 @@ impl Parsers {
                 (FlowItem::Token(token_val))
             )
             | do_parse!(
-                // TODO: This needs obvious fixing.
-                split_val: call!(Self::split_set) >>
-                (FlowItem::Split(SplitSet::new(btreeset![])))
+                split_set: call!(Self::split_set) >>
+                (FlowItem::Split(split_set))
             )
         )
     );
@@ -180,18 +203,16 @@ impl Parsers {
         )
     );
 
+    // A set of splits.
     named!(pub split_set<&str, SplitSet>,
-        // A bracketed sequence of pipe-separated variants.
         ws!(delimited!(
             char!(VAR_SPLIT_START_SIGIL),
-            // call!(Self::phrase),
             do_parse!(
                 splits: separated_nonempty_list_complete!(char!(VAR_SPLIT_SEP_SIGIL), call!(Self::split)) >>
                 (SplitSet::new(splits))
             ),
             char!(VAR_SPLIT_CLOSE_SIGIL)
         ))
-        // ws!(recognize!(separated_nonempty_list_complete!(nom::space, nom::alphanumeric)))
     );
 }
 
@@ -202,6 +223,8 @@ mod tests {
     use nom::{IResult, ErrorKind};
 
     use token::Token;
+    #[macro_use] use parallel::gate::Gate;
+    #[macro_use] use parallel::flow::{Flow, FlowItem, SplitSet, Split};
 
     #[test]
     fn test_integer_repr() {
@@ -487,4 +510,48 @@ mod tests {
             assert_eq!(expected, produced);
         }
     }
+
+    #[test]
+    fn test_gate() {
+        let inputs_and_expected = vec![
+            ("#0", IResult::Done("", allow![0])),
+            ("#1, 2, 4", IResult::Done("", allow![1, 2, 4])),
+            (" # 1, 2, 4 ", IResult::Done("", allow![1, 2, 4])),
+            ("#0, 1, 0", IResult::Done("", allow![0, 1])),
+            ("#!1, 2, 4", IResult::Done("", block![1, 2, 4])),
+            ("#!0", IResult::Done("", block![0])),
+            ("#", IResult::Error(ErrorKind::Complete)),
+            ("#!", IResult::Error(ErrorKind::Complete)),
+        ];
+
+        for (input, expected) in inputs_and_expected {
+            let produced = Parsers::gate(input);
+            assert_eq!(expected, produced);
+        }
+    }
+
+    // #[test]
+    // fn test_flow_item() {
+    //     let inputs_and_expected = vec![
+    //         ("* apple", IResult::Done("", FlowItem::Token(Token::Ingredient("apple".to_string())))),
+    //         ("= saute", IResult::Done("", FlowItem::Token(Token::Action("saute".to_string())))),
+    //         ("[ * apple | = saute ]", IResult::Done("", FlowItem::Split(
+    //             splitset!(
+    //                 Split::new(flow!(FlowItem::Token(Token::Ingredient("apple".to_string()))), block![]),
+    //                 Split::new(flow!(FlowItem::Token(Token::Action("saute".to_string()))), block![]),
+    //             )
+    //         ))),
+    //         ("[ * apple | ]", IResult::Done("", FlowItem::Split(
+    //             splitset!(
+    //                 Split::new(flow!(FlowItem::Token(Token::Ingredient("apple".to_string()))), block![]),
+    //                 Split::new(flow!(), block![]),
+    //             )
+    //         ))),
+    //     ];
+
+    //     for (input, expected) in inputs_and_expected {
+    //         let produced = Parsers::flow_item(input);
+    //         assert_eq!(expected, produced);
+    //     }
+    // }
 }

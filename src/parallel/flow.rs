@@ -9,6 +9,14 @@ use failure::Error;
 use super::gate::{Slot, Gate};
 use token::Token;
 
+macro_rules! splitset {
+    ( $($split:expr),* $(,)? ) => (SplitSet::new(btreeset!($($split),*)));
+}
+
+macro_rules! flow {
+    ( $($flow_item:expr),* $(,)? ) => (Flow::new(vec!($($flow_item),*)));
+}
+
 #[derive(Debug, Fail, PartialEq, Eq)]
 pub enum SlotStackError {
     #[fail(display = "stack is empty")]
