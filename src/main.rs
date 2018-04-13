@@ -11,5 +11,6 @@ extern crate regex;
 mod parallel;
 mod token;
 mod parser;
+mod processor;
 
 fn main() {}
