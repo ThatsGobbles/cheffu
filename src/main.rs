@@ -12,5 +12,6 @@ mod parallel;
 mod token;
 mod parser;
 mod processor;
+mod types;
 
 fn main() {}

@@ -117,7 +117,7 @@ impl Parsers {
         ws!(do_parse!(
             char!(ACTION_SIGIL) >>
             value: call!(Self::phrase) >>
-            (Token::Action(value.to_string()))
+            (Token::Verb(value.to_string()))
         ))
     );
 
@@ -125,7 +125,7 @@ impl Parsers {
         ws!(do_parse!(
             char!(COMBINATION_SIGIL) >>
             value: call!(Self::phrase) >>
-            (Token::Combination(value.to_string()))
+            (Token::Combine(value.to_string()))
         ))
     );
 
@@ -392,17 +392,17 @@ mod tests {
     #[test]
     fn test_action_token() {
         let inputs_and_expected = vec![
-            ("= saute", IResult::Done("", Token::Action("saute".to_string()))),
-            ("= saute      in", IResult::Done("", Token::Action("saute      in".to_string()))),
-            ("=saute", IResult::Done("", Token::Action("saute".to_string()))),
-            (" =saute", IResult::Done("", Token::Action("saute".to_string()))),
-            ("= saute, over high heat", IResult::Done(", over high heat", Token::Action("saute".to_string()))),
+            ("= saute", IResult::Done("", Token::Verb("saute".to_string()))),
+            ("= saute      in", IResult::Done("", Token::Verb("saute      in".to_string()))),
+            ("=saute", IResult::Done("", Token::Verb("saute".to_string()))),
+            (" =saute", IResult::Done("", Token::Verb("saute".to_string()))),
+            ("= saute, over high heat", IResult::Done(", over high heat", Token::Verb("saute".to_string()))),
             ("saute", IResult::Error(ErrorKind::Char)),
             ("= !!!!", IResult::Error(ErrorKind::AlphaNumeric)),
-            ("= saute!!!!", IResult::Done("!!!!", Token::Action("saute".to_string()))),
-            ("= saute !!!!", IResult::Done("!!!!", Token::Action("saute".to_string()))),
-            ("= SAUTE !!!!", IResult::Done("!!!!", Token::Action("SAUTE".to_string()))),
-            ("= SAUTE   007 !!!!", IResult::Done("!!!!", Token::Action("SAUTE   007".to_string()))),
+            ("= saute!!!!", IResult::Done("!!!!", Token::Verb("saute".to_string()))),
+            ("= saute !!!!", IResult::Done("!!!!", Token::Verb("saute".to_string()))),
+            ("= SAUTE !!!!", IResult::Done("!!!!", Token::Verb("SAUTE".to_string()))),
+            ("= SAUTE   007 !!!!", IResult::Done("!!!!", Token::Verb("SAUTE   007".to_string()))),
         ];
 
         for (input, expected) in inputs_and_expected {
@@ -414,17 +414,17 @@ mod tests {
     #[test]
     fn test_combination_token() {
         let inputs_and_expected = vec![
-            ("/ mix", IResult::Done("", Token::Combination("mix".to_string()))),
-            ("/ mix      together", IResult::Done("", Token::Combination("mix      together".to_string()))),
-            ("/mix", IResult::Done("", Token::Combination("mix".to_string()))),
-            (" /mix", IResult::Done("", Token::Combination("mix".to_string()))),
-            ("/ mix, over high heat", IResult::Done(", over high heat", Token::Combination("mix".to_string()))),
+            ("/ mix", IResult::Done("", Token::Combine("mix".to_string()))),
+            ("/ mix      together", IResult::Done("", Token::Combine("mix      together".to_string()))),
+            ("/mix", IResult::Done("", Token::Combine("mix".to_string()))),
+            (" /mix", IResult::Done("", Token::Combine("mix".to_string()))),
+            ("/ mix, over high heat", IResult::Done(", over high heat", Token::Combine("mix".to_string()))),
             ("mix", IResult::Error(ErrorKind::Char)),
             ("/ !!!!", IResult::Error(ErrorKind::AlphaNumeric)),
-            ("/ mix!!!!", IResult::Done("!!!!", Token::Combination("mix".to_string()))),
-            ("/ mix !!!!", IResult::Done("!!!!", Token::Combination("mix".to_string()))),
-            ("/ MIX !!!!", IResult::Done("!!!!", Token::Combination("MIX".to_string()))),
-            ("/ MIX   007 !!!!", IResult::Done("!!!!", Token::Combination("MIX   007".to_string()))),
+            ("/ mix!!!!", IResult::Done("!!!!", Token::Combine("mix".to_string()))),
+            ("/ mix !!!!", IResult::Done("!!!!", Token::Combine("mix".to_string()))),
+            ("/ MIX !!!!", IResult::Done("!!!!", Token::Combine("MIX".to_string()))),
+            ("/ MIX   007 !!!!", IResult::Done("!!!!", Token::Combine("MIX   007".to_string()))),
         ];
 
         for (input, expected) in inputs_and_expected {
@@ -481,8 +481,8 @@ mod tests {
     fn test_token() {
         let inputs_and_expected = vec![
             ("* apple", IResult::Done("", Token::Ingredient("apple".to_string()))),
-            ("= saute", IResult::Done("", Token::Action("saute".to_string()))),
-            ("/ mix", IResult::Done("", Token::Combination("mix".to_string()))),
+            ("= saute", IResult::Done("", Token::Verb("saute".to_string()))),
+            ("/ mix", IResult::Done("", Token::Combine("mix".to_string()))),
             (", red", IResult::Done("", Token::Modifier("red".to_string()))),
             ("; gently", IResult::Done("", Token::Annotation("gently".to_string()))),
         ];
@@ -534,11 +534,11 @@ mod tests {
     // fn test_flow_item() {
     //     let inputs_and_expected = vec![
     //         ("* apple", IResult::Done("", FlowItem::Token(Token::Ingredient("apple".to_string())))),
-    //         ("= saute", IResult::Done("", FlowItem::Token(Token::Action("saute".to_string())))),
+    //         ("= saute", IResult::Done("", FlowItem::Token(Token::Verb("saute".to_string())))),
     //         ("[ * apple | = saute ]", IResult::Done("", FlowItem::Split(
     //             splitset!(
     //                 Split::new(flow!(FlowItem::Token(Token::Ingredient("apple".to_string()))), block![]),
-    //                 Split::new(flow!(FlowItem::Token(Token::Action("saute".to_string()))), block![]),
+    //                 Split::new(flow!(FlowItem::Token(Token::Verb("saute".to_string()))), block![]),
     //             )
     //         ))),
     //         ("[ * apple | ]", IResult::Done("", FlowItem::Split(
